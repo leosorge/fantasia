@@ -3,15 +3,26 @@ import base64
 import hashlib
 import json
 import re
+from datetime import date, datetime
 from html import escape
 from html.parser import HTMLParser
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 LIMIT = 12
 
 
-def receipt(item):
-    return hashlib.sha256(f'{item["id"]}:{item.get("version", "")}'.encode()).hexdigest()
+def receipt(item, body=None):
+    version = item.get("version", "") if body is None else hashlib.sha256(body.encode()).hexdigest()
+    return hashlib.sha256(f'{item["id"]}:{version}'.encode()).hexdigest()
+
+
+def today():
+    try:
+        zone = ZoneInfo("Europe/Rome")
+    except ZoneInfoNotFoundError:
+        zone = None
+    return datetime.now(zone).date().isoformat()
 
 
 def load(path):
@@ -58,7 +69,10 @@ class DemoFrames(HTMLParser):
 
 
 def archive_card(card, archive):
-    archive(card["key"], f'pos12_{card["key"][:16]}.html', card["html"])
+    words = re.findall(r"[^\W_]+(?:[.’'\-][^\W_]+)*", card["title"], flags=re.UNICODE)[:3]
+    stem = "_".join(words)[:90] or "Scheda"
+    published_on = date.fromisoformat(card.get("published_on") or today())
+    archive(card["key"], f"{stem}_{published_on:%d%m%y}.html", card["html"])
 
 
 def initialize_feed(state, demo_path, archive):
@@ -78,15 +92,14 @@ def initialize_feed(state, demo_path, archive):
     state["seeded"] = True
 
 
-def rotate(state, entry, archive):
-    if entry["key"] in state["processed"]:
-        return False
-    slots = state["slots"]
-    if len(slots) == LIMIT:
-        archive_card(slots[-1], archive)
-    state["slots"] = [dict(item, position=i) for i, item in enumerate([entry, *slots[:LIMIT-1]], 1)]
-    state["processed"][entry["key"]] = True
-    return True
+def rotate_batch(state, entries, archive):
+    if not entries:
+        return
+    combined = list(reversed(entries)) + state["slots"]
+    for card in reversed(combined[LIMIT:]):
+        archive_card(card, archive)
+    state["slots"] = [dict(card, position=i) for i, card in enumerate(combined[:LIMIT], 1)]
+    state["processed"].update(dict.fromkeys((entry["key"] for entry in entries), True))
 
 
 STYLE = """
@@ -145,4 +158,8 @@ def save(state, root):
     write(docs / "index.html", render_page(state["slots"]))
     for number in range(1, 5):
         (docs / f"page_{number}.html").unlink(missing_ok=True)
-    write(root / "state_12.json", json.dumps(state, ensure_ascii=False, indent=2) + "\n")
+    save_state(state, root)
+
+
+def save_state(state, root):
+    write(Path(root) / "state_12.json", json.dumps(state, ensure_ascii=False, indent=2) + "\n")

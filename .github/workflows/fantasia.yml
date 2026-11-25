@@ -121,6 +121,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PAGES_ARTIFACT_ID: ${{ steps.pages_artifact.outputs.id }}
         run: python pages_deploy.py "$PAGES_ARTIFACT_ID"
+      - name: Registra la data di prima pubblicazione
+        run: |
+          python main.py mark-published
+          git add -- state_12.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Registra la data di pubblicazione delle schede'
+            git push origin HEAD
+          fi
       - name: Rimuovi dalla coda i sorgenti pubblicati
         env:
           FANTASIA_DRIVE_CREDENTIALS: ${{ secrets.FANTASIA_DRIVE_CREDENTIALS }}

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from drive_io import DriveManager, supported
 from expert_choice import choose_and_adapt, run_expert
-from pager import initialize_feed, load, receipt, rotate, save, write
+from pager import initialize_feed, load, receipt, rotate_batch, save, save_state, today, write
 
 
 def repair_legacy_news(state):
@@ -30,26 +30,50 @@ def prepare(drive, root):
     state = load(root / "state_12.json")
     repair_legacy_news(state)
     initialize_feed(state, root / "index.html", drive.archive)
-    count = 0
+    entries = []
+    seen = set(state["processed"])
     for item in drive.list_new():
-        key = receipt(item)
-        if key in state["processed"] or not supported(item):
+        if not supported(item) or receipt(item) in seen:
             continue
         try:
-            payload = choose_and_adapt(drive.read(item), item["name"])
+            body = drive.read(item)
+            key = receipt(item, body)
+            if key in seen:
+                continue
+            payload = choose_and_adapt(body, item["name"])
         except (UnicodeError, ValueError) as exc:
             print(f'{item["name"]}: {exc} — resta in coda.', file=sys.stderr)
             continue
-        entry = run_expert(payload) | {"key": key}
-        count += rotate(state, entry, drive.archive)
+        entries.append(run_expert(payload) | {"key": key})
+        seen.add(key)
+    rotate_batch(state, entries, drive.archive)
     save(state, root)
-    return count
+    return len(entries)
 
 
 def acknowledge(drive, root):
     state = load(Path(root) / "state_12.json")
-    return sum(drive.acknowledge(item) for item in drive.list_new()
-               if receipt(item) in state["processed"])
+    count = 0
+    for item in drive.list_new():
+        if not supported(item):
+            continue
+        known = receipt(item) in state["processed"]
+        if not known:
+            try:
+                known = receipt(item, drive.read(item)) in state["processed"]
+            except (UnicodeError, ValueError):
+                continue
+        if known:
+            count += drive.acknowledge(item)
+    return count
+
+
+def mark_published(root):
+    state = load(Path(root) / "state_12.json")
+    published_on = today()
+    for card in state["slots"]:
+        card.setdefault("published_on", published_on)
+    save_state(state, root)
 
 
 class DemoDrive:
@@ -67,17 +91,23 @@ class DemoDrive:
 
     def archive(self, key, filename, html):
         target = self.root / "old" / filename
-        if not target.exists():
-            write(target, html)
+        if target.exists():
+            if target.read_text(encoding="utf-8") == html:
+                return
+            target = target.with_name(f"{target.stem}_{key[:8]}{target.suffix}")
+        write(target, html)
 
 
 def cli():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["check-drive", "prepare", "ack", "demo"])
+    parser.add_argument("command", choices=["check-drive", "prepare", "mark-published", "ack", "demo"])
     parser.add_argument("--root", type=Path, default=Path("."))
     args = parser.parse_args()
     if args.command == "demo":
         print(f"{prepare(DemoDrive(args.root), args.root)} card preparate.")
+        return
+    if args.command == "mark-published":
+        mark_published(args.root)
         return
     drive = DriveManager()
     drive.validate()

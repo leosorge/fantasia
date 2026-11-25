@@ -4,8 +4,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from expert_choice import choose_and_adapt, numeric_trail, run_expert
-from main import acknowledge, prepare
-from pager import load, render_page
+from main import acknowledge, mark_published, prepare
+from pager import load, render_page, save_state
 from producer import notify
 
 TEXT = ("Il processore quantistico utilizza qubit fisici per eseguire operazioni controllate. "
@@ -41,6 +41,28 @@ class Queue:
 
 
 class PipelineTests(unittest.TestCase):
+    def test_archive_name_and_batch_rotation_from_full_feed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old = [{"key": f"old{i}", "position": i, "title": f"Vecchia scheda {i} extra",
+                    "published_on": "2026-11-23", "format_label": "News", "format_code": "1", "html": f"<p>{i}</p>"}
+                   for i in range(1, 13)]
+            save_state({"slots": old, "processed": {}}, root)
+            queue = Queue()
+            queue.items = queue.items[:3]
+            self.assertEqual(prepare(queue, root), 3)
+            self.assertEqual([item["title"] for item in load(root / "state_12.json")["slots"]],
+                             ["Scheda 2", "Scheda 1", "Scheda 0", *[card["title"] for card in old[:9]]])
+            self.assertEqual([name for name, _ in queue.outputs.values()],
+                             [f"Vecchia_scheda_{i}_231126.html" for i in (12, 11, 10)])
+            with patch("main.today", return_value="2026-11-25"):
+                mark_published(root)
+            cards = load(root / "state_12.json")["slots"]
+            self.assertEqual([card["published_on"] for card in cards[:4]], ["2026-11-25"] * 3 + ["2026-11-23"])
+            queue.items[0]["version"] = "2"
+            self.assertEqual(prepare(queue, root), 0)
+            self.assertEqual(acknowledge(queue, root), 3)
+
     def test_youtube_translation_is_used_before_automatic_routing(self):
         from unittest.mock import Mock
         video = {"id": "123456789ab", "title": "Quantum satellite",

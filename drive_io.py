@@ -90,6 +90,11 @@ class DriveManager:
                  f"appProperties has {{ key='fantasiaArchive' and value={literal} }}")
         if next(self.list_files(query, "id"), None):
             return
+        name_query = (f"{query_literal(self.old_id)} in parents and trashed=false and "
+                      f"name = {query_literal(filename)}")
+        if next(self.list_files(name_query, "id"), None):
+            path = Path(filename)
+            filename = f"{path.stem}_{key[:8]}{path.suffix}"
         body = {"name": filename, "parents": [self.old_id],
                 "appProperties": {"fantasiaArchive": key}}
         media = MediaIoBaseUpload(io.BytesIO(html.encode("utf-8")), mimetype="text/html", resumable=False)
