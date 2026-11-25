@@ -41,12 +41,14 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     permissions:
       contents: write
+      actions: read
       pages: write
       id-token: write
     env:
       FANTASIA_NEW_ID: ${{ vars.FANTASIA_NEW_ID }}
       FANTASIA_OLD_ID: ${{ vars.FANTASIA_OLD_ID }}
       FANTASIA_SHARED_DRIVE_ID: ${{ vars.FANTASIA_SHARED_DRIVE_ID }}
+      PAGES_ARTIFACT: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,11 +83,28 @@ jobs:
             git commit -m 'Aggiorna il feed FANTASIA'
             git push origin HEAD
           fi
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: docs
+          name: ${{ env.PAGES_ARTIFACT }}
+      - name: Attendi la disponibilità del pacchetto Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in {1..12}; do
+            count=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+              -f name="$PAGES_ARTIFACT" --jq '[.artifacts[] | select(.expired == false)] | length') || count=0
+            if [[ "$count" == 1 ]]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo '::error::Il pacchetto Pages non risulta disponibile per questo tentativo.'
+          exit 1
       - uses: actions/deploy-pages@v4
         id: deploy
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT }}
       - name: Rimuovi dalla coda i sorgenti pubblicati
         env:
           FANTASIA_DRIVE_CREDENTIALS: ${{ secrets.FANTASIA_DRIVE_CREDENTIALS }}
