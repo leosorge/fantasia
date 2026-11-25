@@ -43,10 +43,67 @@ function termsInVideo(plan,item) {
       && (!contextual.has(term) || /\bquantum\b|\bqubits?\b/.test(raw));
   });
 }
-export async function scan(topics,{request,days=1,channels=new Set(),limit=25,now=Date.now()}) {
+const channelIdPattern = /^UC[\w-]{22}$/;
+const handlePattern = /^@[\p{L}\p{M}\p{N}_.·-]{2,40}$/u;
+
+export function parseWatchedChannels(text) {
+  const entries = new Map();
+  for (const [index,line] of text.replace(/^\uFEFF/,"").split(/\r?\n/).entries()) {
+    const input=line.trim();
+    if (!input || input.startsWith("#")) continue;
+    let reference=input;
+    if (input.startsWith("https://") || input.startsWith("http://")) {
+      const url=new URL(input);
+      if (!["youtube.com","www.youtube.com","m.youtube.com"].includes(url.hostname)) {
+        throw new Error("Canale YouTube non valido alla riga "+(index+1)+".");
+      }
+      const parts=url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+      reference=parts[0]==="channel" ? parts[1] : parts[0];
+    }
+    if (handlePattern.test(reference)) {
+      entries.set(reference.toLowerCase(),{forHandle:reference});
+    } else if (channelIdPattern.test(reference)) {
+      entries.set(reference,{id:reference});
+    } else {
+      throw new Error("Canale YouTube non valido alla riga "+(index+1)+".");
+    }
+  }
+  return [...entries.values()];
+}
+
+async function watchedUploads(request, watchedChannels, publishedAfter) {
+  const videos=new Map();
+  for (const channel of watchedChannels) {
+    const reference=channel.forHandle ?? channel.id;
+    const details=await request("channels",{part:"contentDetails",...channel});
+    const playlistId=details.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+    if (!playlistId) {
+      console.warn("Canale seguito non trovato: "+reference);
+      continue;
+    }
+    let pageToken;
+    do {
+      const page=await request("playlistItems",{part:"contentDetails",playlistId,maxResults:"50",
+                                               ...(pageToken ? {pageToken} : {})});
+      const items=page.items ?? [];
+      for (const {contentDetails:video} of items) {
+        if (!video?.videoId || (video.videoPublishedAt && video.videoPublishedAt<publishedAfter)) continue;
+        videos.set(video.videoId,reference);
+      }
+      if (items.some(item=>item.contentDetails?.videoPublishedAt &&
+                           item.contentDetails.videoPublishedAt<publishedAfter)) break;
+      pageToken=page.nextPageToken;
+    } while(pageToken);
+  }
+  return videos;
+}
+
+export async function scan(topics,{request,days=1,channels=new Set(),watchedChannels=[],limit=25,now=Date.now()}) {
   const plans=planSearch(topics);
   const candidates=new Map();
   const publishedAfter=new Date(now-days*86_400_000).toISOString();
+  const watched=await watchedUploads(request,watchedChannels,publishedAfter);
+  for (const id of watched.keys()) candidates.set(id,[]);
   for (const plan of plans) {
     const payload=await request("search",{part:"snippet",q:plan.query,type:"video",videoDuration:"medium",order:"relevance",publishedAfter,maxResults:String(limit)});
     for (const item of payload.items ?? []) {
@@ -62,17 +119,20 @@ export async function scan(topics,{request,days=1,channels=new Set(),limit=25,no
     const payload=await request("videos",{part:"snippet,contentDetails",id:ids.slice(offset,offset+50).join(",")});
     for (const item of payload.items ?? []) {
       const {snippet,id}=item;
-      if (channels.size && !channels.has(snippet.channelId)) continue;
+      const watchedChannel=watched.get(id);
+      if (!watchedChannel && channels.size && !channels.has(snippet.channelId)) continue;
+      if (!snippet.publishedAt || snippet.publishedAt<publishedAfter) continue;
       const duration=item.contentDetails?.duration?.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
       if (!duration) continue;
       const seconds=(+duration[1]||0)*3600+(+duration[2]||0)*60+(+duration[3]||0);
       if (seconds<240 || seconds>1200) continue;
       const tags=candidates.get(id).flatMap(plan=>termsInVideo(plan,item).map(term=>({category:plan.group,term})));
+      if (watchedChannel) tags.unshift({category:"Canali seguiti",term:watchedChannel});
       if (!tags.length) continue;
-      results.push({id,title:snippet.title,description:snippet.description ?? "",channel:snippet.channelTitle,channelId:snippet.channelId,published:snippet.publishedAt,seconds,tags,url:"https://www.youtube.com/watch?v="+id});
+      results.push({id,title:snippet.title,description:snippet.description ?? "",channel:snippet.channelTitle,channelId:snippet.channelId,published:snippet.publishedAt,seconds,tags,url:"https://www.youtube.com/watch?v="+id,watched:Boolean(watchedChannel)});
     }
   }
-  return results.sort((a,b)=>b.published.localeCompare(a.published));
+  return results.sort((a,b)=>Number(b.watched)-Number(a.watched) || b.published.localeCompare(a.published));
 }
 
 const escape = value => String(value).replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
@@ -84,15 +144,17 @@ export function report(results, metadata) {
 async function main() {
   const {values}=parseArgs({options:{
     list:{type:"string"},days:{type:"string",default:"1"},limit:{type:"string",default:"25"},
-    channels:{type:"string"},output:{type:"string",default:"intersearQ.html"},
+    channels:{type:"string"},"watch-channels":{type:"string"},output:{type:"string",default:"intersearQ.html"},
     "dry-run":{type:"boolean"},json:{type:"boolean"}
   }});
   const days=Number(values.days), limit=Number(values.limit);
   if (!Number.isInteger(days) || days<1 || days>365 || !Number.isInteger(limit) || limit<1 || limit>50) throw new Error("Usa --days da 1 a 365 e --limit da 1 a 50.");
   const topics=parseTopics(await readFile(values.list ?? new URL("./Qlist.txt",import.meta.url),"utf8"));
+  const watchedChannels=parseWatchedChannels(await readFile(values["watch-channels"] ??
+    new URL("./youtube-canali.txt",import.meta.url),"utf8"));
   if (values["dry-run"]) {
     const plan=planSearch(topics);
-    console.log(JSON.stringify({terms:topics.reduce((sum,group)=>sum+group.terms.length,0),queries:plan.length,plan},null,2));
+    console.log(JSON.stringify({terms:topics.reduce((sum,group)=>sum+group.terms.length,0),queries:plan.length,watchedChannels,plan},null,2));
     return;
   }
   const key=process.env.YOUTUBE_API_KEY?.trim();
@@ -112,7 +174,7 @@ async function main() {
     }
     return response.json();
   };
-  const results=await scan(topics,{request,days,limit,channels});
+  const results=await scan(topics,{request,days,limit,channels,watchedChannels});
   const metadata=results.length+" video · ultimi "+days+" giorni · "+(channels.size ? channels.size+" canali selezionati" : "tutti i canali");
   const temp=values.output+"."+process.pid+".tmp";
   await writeFile(temp,values.json ? JSON.stringify(results) : report(results,metadata),"utf8");

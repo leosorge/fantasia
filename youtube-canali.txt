@@ -1,0 +1,5 @@
+# Un canale YouTube per riga. Incolla il link oppure scrivi @handle.
+# Le righe vuote e quelle che iniziano con # vengono ignorate.
+https://www.youtube.com/@cineca1969
+https://www.youtube.com/@quantum_computing
+https://www.youtube.com/@marcocasolino

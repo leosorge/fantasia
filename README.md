@@ -1,5 +1,11 @@
 # FANTASIA
 
+## Canali YouTube seguiti
+
+Modifica [youtube-canali.txt](youtube-canali.txt) per aggiungere o togliere un canale. Incolla un URL di canale o scrivi un `@handle` per riga. Le righe vuote e quelle con `#` iniziale sono ignorate.
+
+Ogni ciclo controlla i nuovi caricamenti dei canali seguiti, anche se il titolo o la descrizione non contengono parole di `Qlist.txt`. Questi video hanno precedenza sui risultati della ricerca per argomento. Restano validi i filtri di data e durata e il limite di tre segnalazioni accodate per ciclo. Da CLI puoi usare una lista alternativa con `--watch-channels percorso.txt`.
+
 Il feed legge i testi in ordine di creazione, li adatta a sei formati interattivi o editoriali e mostra gli ultimi 12 in un'unica pagina a scorrimento. Su desktop, se c'è spazio, la griglia è di tre colonne per quattro righe, con schede da 480 × 600 px. Su schermi stretti la griglia si adatta a due colonne o una. I file effettivi su Drive si chiamano **news** e **olds**. La pipeline usa per impostazione predefinita i loro ID. Le variabili `FANTASIA_NEW_ID` e `FANTASIA_OLD_ID` li possono sostituire.
 
 | Codice | Esperto |
