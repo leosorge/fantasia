@@ -1,0 +1,496 @@
+.slide-preview {
+  position: sticky;
+  top: 96px;
+  display: flex;
+  min-height: 280px;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 5;
+  container-type: inline-size;
+  overflow: hidden;
+  padding: clamp(26px, 10cqw, 56px);
+  border-radius: 14px;
+  color: var(--preview-text, #fff);
+  background: var(--preview-bg, #2d2e2f);
+  font-family: var(--preview-body);
+}
+
+.slide-preview.has-cover-image {
+  background: var(--preview-bg, #2d2e2f);
+}
+
+.slide-preview::before {
+  position: absolute;
+  inset: clamp(14px, 5cqw, 28px);
+  border: 1px dashed color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 8px;
+  content: "";
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.slide-preview::after {
+  content: none;
+}
+
+.slide-preview[data-kind="cover"]::before,
+.slide-preview[data-kind="cover"]::after {
+  content: none;
+}
+
+.preview-page {
+  position: absolute;
+  z-index: 2;
+  top: clamp(18px, 5.8cqw, 31px);
+  right: clamp(20px, 6.2cqw, 34px);
+  color: currentColor;
+  font-size: clamp(9px, 2.7cqw, 13px);
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  opacity: 1;
+}
+
+.preview-brand {
+  position: absolute;
+  z-index: 1;
+  right: clamp(20px, 6cqw, 34px);
+  bottom: clamp(18px, 5cqw, 28px);
+  left: clamp(20px, 6cqw, 34px);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: currentColor;
+  font-size: clamp(9px, 2.7cqw, 14px);
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  opacity: 1;
+}
+
+.preview-signature {
+  font-weight: 800;
+}
+
+.preview-logo {
+  display: block;
+  width: auto;
+  max-width: 34%;
+  height: clamp(16px, 5.2cqw, 28px);
+  object-fit: contain;
+  object-position: left center;
+}
+
+.preview-website {
+  margin-left: auto;
+  font-weight: 600;
+}
+
+.safe-area-frame {
+  position: absolute;
+  inset: clamp(14px, 5cqw, 28px);
+  border: 1px dashed currentColor;
+  border-radius: 8px;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.preview-copy {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  margin-right: auto;
+  text-align: left;
+}
+
+.preview-title,
+.preview-summary {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.preview-title {
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+  font-family: var(--preview-display);
+  font-size: clamp(24px, calc(10.4cqw * var(--preview-scale)), 48px);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+}
+
+.preview-summary {
+  overflow-wrap: break-word;
+  word-break: normal;
+  font-family: var(--preview-body);
+  font-size: clamp(18px, calc(5.95cqw * var(--preview-scale)), 33px);
+  font-weight: 620;
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+}
+
+.preview-summary.has-sentence-breaks {
+  white-space: normal;
+}
+
+.preview-sentence {
+  display: block;
+}
+
+.preview-sentence + .preview-sentence {
+  margin-top: var(--sentence-gap, 0.6em);
+}
+
+.preview-serif {
+  font-family: var(--preview-serif);
+  font-style: italic;
+}
+
+.preview-italic {
+  font-family: var(--preview-body);
+  font-style: normal;
+}
+
+.preview-cover-subtitle {
+  font-family: var(--preview-body);
+  font-style: normal;
+}
+
+.slide-preview.has-real-italic .preview-italic,
+.slide-preview.has-real-italic .preview-cover-subtitle {
+  font-family: var(--preview-italic);
+  font-style: italic;
+}
+
+.preview-accent {
+  padding: 0.025em 0.1em 0.04em;
+  margin-inline: -0.025em;
+  color: var(--preview-highlight-text, var(--preview-text));
+  background: var(--preview-highlight, var(--preview-accent, var(--accent)));
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.preview-underline {
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.085em;
+  text-underline-offset: 0.13em;
+}
+
+.preview-bold {
+  font-family: var(--preview-body-bold, var(--preview-body));
+  font-weight: 700;
+}
+
+.preview-title + .preview-summary {
+  margin-top: 20px;
+}
+
+/* The three proof systems are CSS geometry only. They inherit the profile's
+   palette and fonts via the preview variables set by app.js. */
+.slide-preview.visual-system-editorial-frame:is(:not([data-kind="cover"]), .typographic-cover)::before {
+  inset: clamp(13px, 4.8cqw, 27px);
+  border: clamp(1px, 0.42cqw, 2px) solid color-mix(in srgb, currentColor 72%, transparent);
+  border-radius: 0;
+  opacity: 0.8;
+}
+
+.slide-preview.visual-system-editorial-frame .preview-copy {
+  width: 88%;
+  max-width: none;
+  text-align: left;
+}
+
+.slide-preview.visual-system-editorial-frame:is(:not([data-kind="cover"]), .typographic-cover) .preview-copy {
+  width: 88%;
+}
+
+.slide-preview.visual-system-editorial-frame .preview-title {
+  font-family: var(--preview-display);
+  font-style: normal;
+}
+
+.slide-preview.visual-system-editorial-frame:is(:not([data-kind="cover"]), .typographic-cover) .preview-brand {
+  padding-top: clamp(8px, 2.2cqw, 13px);
+  border-top: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+}
+
+.slide-preview.visual-system-editorial-halftone::before {
+  content: none;
+}
+
+.preview-constellation {
+  display: none;
+}
+
+.slide-preview.visual-system-editorial-halftone:is(:not([data-kind="cover"]), .typographic-cover) .preview-constellation {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.preview-sphere {
+  position: absolute;
+  display: block;
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+.preview-sphere-primary {
+  top: 7%;
+  right: -28%;
+  width: 58%;
+  background: var(--preview-accent);
+}
+
+.preview-sphere-core {
+  top: 22%;
+  right: 18%;
+  width: 4%;
+  background: currentColor;
+}
+
+.preview-sphere-ring {
+  top: 38%;
+  right: 7%;
+  width: 19%;
+  border: 1px solid color-mix(in srgb, currentColor 58%, transparent);
+}
+
+.preview-sphere-moon {
+  top: 54%;
+  right: 26%;
+  width: 6.5%;
+  background: var(--preview-accent);
+}
+
+.preview-sphere-satellite {
+  right: 17%;
+  bottom: 18%;
+  width: 13%;
+  background: color-mix(in srgb, currentColor 62%, var(--preview-bg));
+}
+
+.slide-preview.visual-system-editorial-halftone[data-surface="light"] .preview-sphere-primary {
+  background: var(--preview-dark-bg);
+}
+
+.slide-preview.visual-system-editorial-halftone[data-surface="light"] .preview-sphere-satellite {
+  background: var(--preview-accent);
+}
+
+.slide-preview.visual-system-editorial-halftone[data-constellation-position="low"] .preview-sphere-primary {
+  top: auto;
+  right: -27%;
+  bottom: 6%;
+}
+
+.slide-preview.visual-system-editorial-halftone[data-constellation-position="low"] .preview-sphere-core {
+  top: 31%;
+  right: 8%;
+  background: color-mix(in srgb, currentColor 60%, var(--preview-bg));
+}
+
+.slide-preview.visual-system-editorial-halftone[data-constellation-position="low"] .preview-sphere-ring {
+  top: 43%;
+  right: 8%;
+}
+
+.slide-preview.visual-system-editorial-halftone[data-constellation-position="low"] .preview-sphere-moon {
+  top: 61%;
+  right: 27%;
+}
+
+.slide-preview.visual-system-editorial-halftone[data-constellation-position="low"] .preview-sphere-satellite {
+  top: 15%;
+  right: 16%;
+  bottom: auto;
+}
+
+.slide-preview.visual-system-editorial-halftone .preview-copy {
+  z-index: 2;
+  width: 70%;
+  max-width: none;
+  margin-right: auto;
+  margin-left: 0;
+  text-align: left;
+}
+
+.slide-preview.visual-system-editorial-halftone:not([data-kind="cover"]) .preview-copy {
+  width: 70%;
+}
+
+.slide-preview.visual-system-editorial-halftone[data-kind="cover"] .preview-copy {
+  width: 88%;
+}
+
+.slide-preview.visual-system-editorial-halftone .preview-title {
+  font-family: var(--preview-display);
+  font-style: normal;
+}
+
+.slide-preview.visual-system-editorial-halftone .preview-brand {
+  z-index: 3;
+  opacity: 1;
+}
+
+.slide-preview.visual-system-editorial-halftone .preview-page {
+  z-index: 3;
+  opacity: 1;
+}
+
+.slide-preview.visual-system-editorial-halftone.has-cover-image .preview-page {
+  color: #fff;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.62);
+}
+
+.preview-frame-field {
+  display: none;
+}
+
+.slide-preview.visual-system-corporate-modular:is(:not([data-kind="cover"]), .typographic-cover) {
+  align-items: flex-start;
+  color: var(--preview-dark-text);
+  background: var(--preview-dark-bg);
+}
+
+.slide-preview.visual-system-corporate-modular.typographic-cover[data-kind="cover"] {
+  align-items: center;
+}
+
+.slide-preview.visual-system-corporate-modular:is(:not([data-kind="cover"]), .typographic-cover)::before {
+  position: absolute;
+  z-index: 1;
+  inset: clamp(38px, 10cqw, 56px) clamp(34px, 9cqw, 50px) clamp(48px, 12cqw, 68px) clamp(27px, 7cqw, 39px);
+  border: 0;
+  border-radius: 0;
+  background: var(--preview-light-bg);
+  content: "";
+  opacity: 1;
+}
+
+.slide-preview.visual-system-corporate-modular:is(:not([data-kind="cover"]), .typographic-cover)::after {
+  position: absolute;
+  z-index: 0;
+  right: 0;
+  bottom: 0;
+  width: 56%;
+  height: 15%;
+  background: var(--preview-accent);
+  content: "";
+}
+
+.slide-preview.visual-system-corporate-modular:is(:not([data-kind="cover"]), .typographic-cover) .preview-frame-field {
+  display: block;
+}
+
+.slide-preview.visual-system-corporate-modular:is(:not([data-kind="cover"]), .typographic-cover) .preview-copy {
+  z-index: 2;
+  width: 88%;
+  max-width: none;
+  margin-top: clamp(28px, 4cqw, 44px);
+  margin-right: clamp(8px, 1cqw, 14px);
+  margin-left: clamp(8px, 2cqw, 16px);
+  color: var(--preview-light-text);
+}
+
+.slide-preview.visual-system-corporate-modular.typographic-cover[data-kind="cover"] .preview-copy {
+  margin-top: 0;
+}
+
+.slide-preview.visual-system-corporate-modular .preview-title {
+  font-family: var(--preview-display);
+  font-style: normal;
+  letter-spacing: -0.035em;
+}
+
+.slide-preview.visual-system-corporate-modular:is(:not([data-kind="cover"]), .typographic-cover) .preview-title:not([hidden]),
+.slide-preview.visual-system-corporate-modular:is(:not([data-kind="cover"]), .typographic-cover) .preview-title[hidden] + .preview-summary:not(.has-sentence-breaks) {
+  width: auto;
+  padding: 0;
+  color: var(--preview-light-text);
+  background: transparent;
+}
+
+.slide-preview.visual-system-corporate-modular:not([data-kind="cover"])[data-kind="outro"] .preview-title:not([hidden]) {
+  width: auto;
+  padding: 0;
+  color: var(--preview-light-text);
+  background: transparent;
+  font-weight: 400 !important;
+}
+
+.slide-preview.visual-system-corporate-modular:is(:not([data-kind="cover"]), .typographic-cover) .preview-page {
+  z-index: 2;
+  top: clamp(50px, 13cqw, 72px);
+  right: clamp(46px, 12cqw, 67px);
+  color: var(--preview-light-text);
+}
+
+.slide-preview.visual-system-corporate-modular:is(:not([data-kind="cover"]), .typographic-cover) .preview-brand {
+  z-index: 2;
+  right: clamp(46px, 12cqw, 67px);
+  bottom: clamp(67px, 17cqw, 95px);
+  left: clamp(82px, 22cqw, 122px);
+  color: var(--preview-light-text);
+  opacity: 1;
+}
+
+.slide-preview.cover-split[data-kind="cover"] {
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.preview-cover-media,
+.preview-cover-placeholder {
+  position: absolute;
+  z-index: 0;
+  inset: 0 0 0 55%;
+  width: 45%;
+  height: 100%;
+}
+
+.preview-cover-media {
+  display: block;
+  object-fit: cover;
+}
+
+.preview-cover-placeholder {
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 6cqw, 34px);
+  color: color-mix(in srgb, var(--preview-text) 76%, transparent);
+  background: color-mix(in srgb, var(--preview-accent) 18%, var(--preview-bg));
+  font-size: clamp(10px, 3cqw, 15px);
+  font-weight: 750;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.slide-preview.cover-split[data-kind="cover"] .preview-copy,
+.slide-preview.visual-system-editorial-frame.cover-split[data-kind="cover"] .preview-copy,
+.slide-preview.visual-system-editorial-halftone.cover-split[data-kind="cover"] .preview-copy,
+.slide-preview.visual-system-corporate-modular.cover-split[data-kind="cover"] .preview-copy {
+  z-index: 2;
+  width: 49%;
+  margin-right: auto;
+  margin-left: 0;
+}
+
+.slide-preview.cover-split[data-kind="cover"] .preview-title {
+  font-size: clamp(22px, calc(8.5cqw * var(--preview-scale)), 41px);
+}
+
+.slide-preview.cover-split[data-kind="cover"] .preview-page {
+  right: 51%;
+  padding: 5px 7px;
+  color: #ffffff;
+  background: rgba(12, 22, 40, 0.82);
+}
+
+.slide-preview.cover-split[data-kind="cover"] .preview-brand {
+  right: 51%;
+}

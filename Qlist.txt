@@ -1,0 +1,23 @@
+1. Quantum computer lanciati o annunciati
+
+1 parola: Willow, Helios, Nighthawk, Tempo
+2 parole: IBM Quantum, Quantum System Two, IonQ Forte, Majorana 2, Rigetti Cepheus, IQM Halocene, IQM Spark, Pasqal CINECA, D-Wave Advantage2, QuEra Gemini
+3 parole: IBM Starling roadmap, Quantinuum Helios system, Fujitsu diamond-spin
+
+2. Chip e dispositivi
+
+1 parola: qubit, transmon, fluxonium, cryo-CMOS
+2 parole: superconducting qubit, topological qubit, trapped ion, neutral atom, spin qubit, cat qubit, quantum annealer, dilution refrigerator, control electronics
+3 parole: error-corrected logical qubit, cryogenic control chip, photonic quantum chip
+
+3. Stack software
+
+1 parola: Qiskit, Cirq, PennyLane, CUDA-Q, Braket, OpenQASM
+2 parole: quantum SDK, quantum compiler, error mitigation, QEC decoder, quantum middleware, quantum orchestration, hybrid workflow
+3 parole: quantum software stack, quantum HPC integration, QPU-GPU integration, Quantum-as-a-Service
+
+4. Applicazioni di utenti
+
+1 parola: cryptanalysis
+2 parole: quantum chemistry, drug discovery, materials simulation, portfolio optimization, quantum machine learning, quantum sensing
+3 parole: quantum advantage demonstration, quantum use case, industry pilot project, HSBC quantum trading, Airbus quantum optimization

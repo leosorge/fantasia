@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3D — Formato</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui;color:#ebf4fd;background:#081423}
+*{box-sizing:border-box}body,p{margin:0}
+.preview{display:flex;flex-direction:column;justify-content:space-between;max-width:480px;min-height:min(125vw,600px);margin:auto}
+.description{padding:20px 22px 10px;line-height:1.43;font-size:clamp(15px,4vw,19px);white-space:pre-wrap;overflow-wrap:anywhere}
+.description footer{white-space:normal;margin-top:8px}.description a{color:#adffe5}
+.canvas-wrap{display:grid;place-items:center;flex:1;min-height:min(62vw,280px)}
+canvas{display:block;width:100%;height:auto;touch-action:pan-y;cursor:grab}canvas:active{cursor:grabbing}
+.controls{display:flex;gap:7px;flex-wrap:wrap;padding:9px 16px 12px}
+button{font:inherit;color:inherit;background:#192630;border:1px solid #597083;border-radius:7px;padding:5px 9px;cursor:pointer}
+button:hover{background:#243d4d}
+</style></head>
+<body>
+<main>
+  
+  <section class="preview" aria-label="Anteprima 3D">
+    <div class="description"><p>__FANTASIA_53_TEXT__</p>__FANTASIA_53_SOURCE__</div>
+    <div class="canvas-wrap"><canvas id="view" width="1080" height="760" aria-label="Scena tridimensionale ruotabile"></canvas></div>
+    <div class="controls">
+      <button id="play" type="button"></button>
+      <button id="left" type="button" aria-label="Ruota a sinistra">&#8592;</button>
+      <button id="right" type="button" aria-label="Ruota a destra">&#8594;</button>
+      <button id="reset" type="button">Ripristina vista</button>
+    </div>
+  </section>
+</main>
+<script id="settings" type="application/json">__FANTASIA_53_SETTINGS__</script>
+<script>
+"use strict";
+const get = id => document.getElementById(id);
+const settings = JSON.parse(get("settings").textContent);
+const canvas = get("view");
+const ctx = canvas.getContext("2d");
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const {width,height} = canvas;
+let yaw = -0.6;
+let pitch = 0.52;
+let playing = !reducedMotion.matches;
+let frame = null;
+let previous = null;
+let drag = null;
+let mesh;
+
+function box(faces, x, y, z, w, h, d, color) {
+  const vertices = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]]
+    .map(([a,b,c])=>[x+a*w/2,y+b*h/2,z+c*d/2]);
+  const sides = [[0,3,2,1],[4,5,6,7],[0,1,5,4],[3,7,6,2],[0,4,7,3],[1,2,6,5]];
+  sides.forEach(side=>faces.push({points:side.map(index=>vertices[index]),color}));
+}
+
+function geometry() {
+  const faces = [];
+  if (settings.scene === "chip") {
+    box(faces,0,0,0,3.8,.24,3.8,"#264f65");
+    box(faces,0,.18,0,2.55,.16,2.55,settings.color);
+    box(faces,0,.32,0,1.65,.15,1.65,"#344e87");
+    for (let i=-3;i<=3;i++) {
+      for (const side of [-1,1]) {
+        box(faces,i*.42,.03,side*2.03,.19,.12,.49,"#e5bc72");
+        box(faces,side*2.03,.03,i*.42,.49,.12,.19,"#e5bc72");
+      }
+    }
+  } else if (settings.scene === "lattice") {
+    for (const x of [-1,0,1]) for (const y of [-1,0,1]) for (const z of [-1,0,1]) {
+      box(faces,x*1.34,y*1.34,z*1.34,.68,.68,.68,(x+y+z)%2 ? "#4779ad" : settings.color);
+    }
+  } else {
+    box(faces,0,0,0,1.15,1.45,1.12,"#cfd7e5");
+    box(faces,0,.79,0,.64,.16,.64,"#e5bc72");
+    box(faces,0,1.1,0,.09,.53,.09,"#aebdcd");
+    for (const side of [-1,1]) {
+      box(faces,side*.88,0,0,.63,.09,.12,"#aebdcd");
+      for (let i=0;i<3;i++) for (const row of [-1,1]) {
+        box(faces,side*(1.48+i*.45),0,row*.26,.41,.11,.48,settings.color);
+      }
+    }
+  }
+  return faces;
+}
+
+function rotate([x,y,z]) {
+  const a = x*Math.cos(yaw)+z*Math.sin(yaw);
+  const b = z*Math.cos(yaw)-x*Math.sin(yaw);
+  return [a,y*Math.cos(pitch)-b*Math.sin(pitch),b*Math.cos(pitch)+y*Math.sin(pitch)];
+}
+
+function project([x,y,z]) {
+  const scale = 1290/(8.5-z);
+  return [width/2+x*scale,height*.54-y*scale];
+}
+
+function paint() {
+  const background = ctx.createRadialGradient(width*.5,height*.50,30,width*.5,height*.50,720);
+  background.addColorStop(0,"#1a3653");
+  background.addColorStop(1,"#080f1d");
+  ctx.fillStyle = background;
+  ctx.fillRect(0,0,width,height);
+  ctx.strokeStyle = "#719abd26";
+  ctx.lineWidth = 2;
+  for (const radius of [150,260,380,495]) {
+    ctx.beginPath();
+    ctx.ellipse(width/2,height*.74,radius,radius*.19,0,0,Math.PI*2);
+    ctx.stroke();
+  }
+  const visible = [];
+  for (const {points,color} of mesh) {
+    const vertices = points.map(rotate);
+    const [a,b,c] = vertices;
+    const u = b.map((value,i)=>value-a[i]);
+    const v = c.map((value,i)=>value-a[i]);
+    const normal = [u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+    const center = vertices.reduce((sum,point)=>sum.map((value,i)=>value+point[i]/4),[0,0,0]);
+    if (-normal[0]*center[0]-normal[1]*center[1]+normal[2]*(8.5-center[2])<=0) continue;
+    const light = Math.max(0,(normal[0]*-.35+normal[1]*.80+normal[2]*.48)/Math.hypot(...normal));
+    visible.push({path:vertices.map(project),color,light,depth:center[2]});
+  }
+  visible.sort((a,b)=>a.depth-b.depth);
+  for (const {path,color,light} of visible) {
+    ctx.beginPath();
+    ctx.moveTo(...path[0]);
+    for (const point of path.slice(1)) ctx.lineTo(...point);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.fillStyle = "rgba(0,10,26,"+(0.57-light*.55)+")";
+    ctx.fill();
+    ctx.strokeStyle = "#b3e6ff38";
+    ctx.stroke();
+  }
+}
+
+function tick(now) {
+  frame = null;
+  if (!playing) return;
+  if (previous !== null && drag === null) yaw += Math.min(50,now-previous)*settings.speed*.00058;
+  previous = now;
+  paint();
+  frame = requestAnimationFrame(tick);
+}
+function playback() {
+  get("play").textContent = playing ? "Pausa" : "Riproduci";
+  if (frame !== null) cancelAnimationFrame(frame);
+  frame = null;
+  previous = null;
+  if (playing) frame = requestAnimationFrame(tick);
+}
+function refresh() {
+  mesh = geometry();
+  paint();
+}
+get("play").onclick = ()=>{playing=!playing; playback();};
+get("left").onclick = ()=>{yaw-=Math.PI/12; paint();};
+get("right").onclick = ()=>{yaw+=Math.PI/12; paint();};
+get("reset").onclick = ()=>{yaw=-.6; pitch=.52; paint();};
+canvas.addEventListener("pointerdown",event=>{
+  if (!event.isPrimary || event.button!==0) return;
+  drag = {id:event.pointerId,x:event.clientX,y:event.clientY};
+  canvas.setPointerCapture(event.pointerId);
+});
+canvas.addEventListener("pointermove",event=>{
+  if (drag?.id!==event.pointerId) return;
+  yaw += (event.clientX-drag.x)*.012;
+  pitch = Math.max(-1.35,Math.min(1.35,pitch+(event.clientY-drag.y)*.012));
+  drag.x=event.clientX;
+  drag.y=event.clientY;
+  paint();
+});
+canvas.addEventListener("lostpointercapture",()=>{drag=null;});
+
+refresh();
+playback();
+const preview=document.querySelector(".preview");
+if(parent!==window){
+  new ResizeObserver(()=>{
+    parent.postMessage({type:"fantasia-3d-height",height:Math.ceil(preview.getBoundingClientRect().height)},"*");
+  }).observe(preview);
+}
+</script>
+</body>
+</html>

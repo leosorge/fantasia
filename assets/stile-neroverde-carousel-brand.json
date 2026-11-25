@@ -1,0 +1,71 @@
+{
+  "profile_type": "carousel-brand",
+  "schema_version": "1.1",
+  "name": "Zorge",
+  "website": "Zorge.de",
+  "signature": "Zorge",
+  "tagline": "",
+  "logos": {
+    "on_light": "",
+    "on_dark": ""
+  },
+  "fonts": {
+    "display": {
+      "family": "Arial",
+      "source": "system"
+    },
+    "body": {
+      "family": "Arial",
+      "source": "system"
+    },
+    "emphasis_italic": {
+      "family": "Arial",
+      "source": "system"
+    }
+  },
+  "typography": {
+    "cover_px": 112,
+    "cover_subtitle_px": 56,
+    "section_title_px": 72,
+    "body_px": 64,
+    "cover_weight": 800,
+    "cover_subtitle_weight": 500,
+    "section_title_weight": 800,
+    "body_weight": 620,
+    "body_line_height": 1.12,
+    "sentence_gap_em": 0.6,
+    "cover_subtitle_line_height": 1.08,
+    "body_tracking_em": -0.025,
+    "metadata_px": 26
+  },
+  "palette": {
+    "surface_mode": "alternating",
+    "background_light": "#F2F1ED",
+    "background_dark": "#090A0C",
+    "text_on_light": "#090A0C",
+    "text_on_dark": "#FFFFFF",
+    "accent": "#B8FF35"
+  },
+  "visual_direction": {
+    "mode": "editorial-geometric",
+    "description": "Contrasto netto, atmosfera cyber e geometrie essenziali",
+    "references": [],
+    "avoid": [
+      "robot umanoidi",
+      "lucchetti stock",
+      "circuiti generici"
+    ],
+    "internal_slides": "clean_typographic"
+  },
+  "visual_signature": {
+    "style_system": "editorial-frame"
+  },
+  "outro": {
+    "enabled": true,
+    "goal": "visit_website",
+    "copy_mode": "generate_from_source",
+    "eyebrow": "",
+    "fixed_title": "",
+    "fixed_body": ""
+  }
+}
