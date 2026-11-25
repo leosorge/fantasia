@@ -95,10 +95,13 @@ class DriveManager:
         media = MediaIoBaseUpload(io.BytesIO(html.encode("utf-8")), mimetype="text/html", resumable=False)
         self.files.create(body=body, media_body=media, supportsAllDrives=True, fields="id").execute()
 
+    def has_video(self, video_id):
+        query = f"appProperties has {{ key='fantasiaVideo' and value={query_literal(video_id)} }}"
+        return next(self.list_files(query, "id"), None) is not None
+
     def enqueue_video(self, video_id, filename, content):
         from googleapiclient.http import MediaIoBaseUpload
-        query = f"appProperties has {{ key='fantasiaVideo' and value={query_literal(video_id)} }}"
-        if next(self.list_files(query, "id"), None):
+        if self.has_video(video_id):
             return False
         body = {"name": filename, "parents": [self.new_id],
                 "appProperties": {"fantasiaVideo": video_id}}

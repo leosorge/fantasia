@@ -69,7 +69,7 @@ export async function scan(topics,{request,days=1,channels=new Set(),limit=25,no
       if (seconds<240 || seconds>1200) continue;
       const tags=candidates.get(id).flatMap(plan=>termsInVideo(plan,item).map(term=>({category:plan.group,term})));
       if (!tags.length) continue;
-      results.push({id,title:snippet.title,channel:snippet.channelTitle,channelId:snippet.channelId,published:snippet.publishedAt,seconds,tags,url:"https://www.youtube.com/watch?v="+id});
+      results.push({id,title:snippet.title,description:snippet.description ?? "",channel:snippet.channelTitle,channelId:snippet.channelId,published:snippet.publishedAt,seconds,tags,url:"https://www.youtube.com/watch?v="+id});
     }
   }
   return results.sort((a,b)=>b.published.localeCompare(a.published));

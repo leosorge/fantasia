@@ -6,6 +6,7 @@ from unittest.mock import patch
 from expert_choice import choose_and_adapt, numeric_trail, run_expert
 from main import acknowledge, prepare
 from pager import load, render_page
+from producer import notify
 
 TEXT = ("Il processore quantistico utilizza qubit fisici per eseguire operazioni controllate. "
         "La correzione protegge la memoria logica durante il calcolo. "
@@ -40,6 +41,21 @@ class Queue:
 
 
 class PipelineTests(unittest.TestCase):
+    def test_youtube_translation_is_used_before_automatic_routing(self):
+        from unittest.mock import Mock
+        video = {"id": "123456789ab", "title": "Quantum satellite",
+                 "description": "This quantum satellite enters orbit.",
+                 "channel": "Editorial Lab", "published": "2026-11-25", "seconds": 240}
+        translator = Mock()
+        translator.translate.return_value = ("Satellite quantistico", "Il satellite entra in orbita.")
+        draft = notify(video, translator)
+        translator.translate.assert_called_once_with(video["title"], video["description"])
+        self.assertNotIn("Formato:", draft)
+        self.assertNotIn(video["description"], draft)
+        self.assertIn("https://www.youtube.com/watch?v=123456789ab", draft)
+        with patch("expert_choice.randint", return_value=2):
+            self.assertEqual(choose_and_adapt(draft, "youtube")["format_code"], "5.2")
+
     def test_preserve_demo_on_first_publication(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
