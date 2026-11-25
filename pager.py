@@ -1,8 +1,10 @@
-"""Stato persistente e quattro pagine, tre card per pagina."""
+"""Stato persistente e feed a rotazione di dodici schede."""
 import base64
 import hashlib
 import json
+import re
 from html import escape
+from html.parser import HTMLParser
 from pathlib import Path
 
 LIMIT = 12
@@ -17,9 +19,63 @@ def load(path):
     if not path.exists():
         return {"slots": [], "processed": {}}
     state = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(state, dict) or set(state) != {"slots", "processed"} or len(state["slots"]) > LIMIT:
+    if (not isinstance(state, dict) or set(state) - {"slots", "processed", "seeded"}
+            or not {"slots", "processed"} <= set(state) or len(state["slots"]) > LIMIT):
         raise ValueError("Stato pager incompatibile.")
     return state
+
+
+class DemoFrames(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.cards = []
+        self.read_label = False
+        self.label = ""
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "h2":
+            self.read_label = True
+            self.label = ""
+        if tag != "iframe":
+            return
+        fields = dict(attrs)
+        if not fields.get("srcdoc") or not fields.get("title"):
+            return
+        label = re.sub(r"^\d+\.\s*", "", self.label.strip())
+        if not label:
+            return
+        key = hashlib.sha256(f'demo:{len(self.cards)}:{fields["title"]}'.encode()).hexdigest()
+        self.cards.append({"key": key, "title": fields["title"], "html": fields["srcdoc"],
+                           "format_label": label, "format_code": "5.0" if fields.get("data-fit") == "3d" else "demo"})
+
+    def handle_endtag(self, tag):
+        if tag == "h2":
+            self.read_label = False
+
+    def handle_data(self, data):
+        if self.read_label:
+            self.label += data
+
+
+def archive_card(card, archive):
+    archive(card["key"], f'pos12_{card["key"][:16]}.html', card["html"])
+
+
+def initialize_feed(state, demo_path, archive):
+    if state.get("seeded") or not demo_path.is_file():
+        return
+    source = demo_path.read_text(encoding="utf-8-sig")
+    if "FANTASIA — Demo</title>" not in source:
+        return
+    parser = DemoFrames()
+    parser.feed(source)
+    if len(parser.cards) != LIMIT:
+        raise ValueError("La pagina demo di partenza non contiene 12 schede.")
+    combined = state["slots"] + parser.cards
+    for card in reversed(combined[LIMIT:]):
+        archive_card(card, archive)
+    state["slots"] = [dict(card, position=i) for i, card in enumerate(combined[:LIMIT], 1)]
+    state["seeded"] = True
 
 
 def rotate(state, entry, archive):
@@ -27,8 +83,7 @@ def rotate(state, entry, archive):
         return False
     slots = state["slots"]
     if len(slots) == LIMIT:
-        last = slots[-1]
-        archive(last["key"], f'pos12_{last["key"][:16]}.html', last["html"])
+        archive_card(slots[-1], archive)
     state["slots"] = [dict(item, position=i) for i, item in enumerate([entry, *slots[:LIMIT-1]], 1)]
     state["processed"][entry["key"]] = True
     return True

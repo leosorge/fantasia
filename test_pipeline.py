@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from expert_choice import choose_and_adapt, numeric_trail, run_expert
 from main import acknowledge, prepare
-from pager import load
+from pager import load, render_page
 
 TEXT = ("Il processore quantistico utilizza qubit fisici per eseguire operazioni controllate. "
         "La correzione protegge la memoria logica durante il calcolo. "
@@ -40,6 +40,27 @@ class Queue:
 
 
 class PipelineTests(unittest.TestCase):
+    def test_preserve_demo_on_first_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            seed = [{"key": str(i), "position": i, "title": f"Demo {i}",
+                     "format_label": "News", "format_code": "1", "html": f"<p>Demo {i}</p>"}
+                    for i in range(1, 13)]
+            (root / "index.html").write_text(render_page(seed, "FANTASIA — Demo"), encoding="utf-8")
+            queue = Queue()
+            queue.items = queue.items[:1]
+            queue.read = lambda item: "TITOLO\nTitolo reale\n\nSOMMARIO\nSintesi breve.\n\nTESTO\nCorpo.\n\nQUIZ\nDomanda?"
+            self.assertEqual(prepare(queue, root), 1)
+            cards = load(root / "state_12.json")["slots"]
+            self.assertEqual([c["title"] for c in cards], ["Titolo reale", *[f"Demo {i}" for i in range(1, 12)]])
+            self.assertEqual(cards[0]["format_code"], "1")
+            self.assertIn("Sintesi breve.", cards[0]["html"])
+            self.assertNotIn("Domanda?", cards[0]["html"])
+            self.assertEqual([c["position"] for c in cards], list(range(1, 13)))
+            self.assertEqual([html for _, html in queue.outputs.values()], ["<p>Demo 12</p>"])
+            self.assertEqual(prepare(queue, root), 0)
+            self.assertEqual(len(queue.outputs), 1)
+
     def test_dispatch(self):
         for code in CODES:
             body = TEXT if code != "4" else "La navetta percorre 120 km. La batteria è al 75%. La stazione dispone di 8 antenne."

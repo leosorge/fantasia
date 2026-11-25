@@ -53,6 +53,16 @@ def safe_url(value):
 
 
 def parse_source(text):
+    text = text.strip()
+    if re.match(r"TITOLO[ \t]*\r?\n", text, re.I):
+        parts = re.split(r"(?mi)^(TITOLO|SOMMARIO|TESTO|QUIZ|FRASE[- ]SINTESI|FONTE|URL)[ \t]*\r?$", text)
+        sections = {parts[i].lower(): parts[i + 1].strip() for i in range(1, len(parts), 2)}
+        body = sections.get("testo") or sections.get("sommario")
+        if body and sections.get("titolo"):
+            fields = {"titolo": sections["titolo"], "sommario": sections.get("sommario", ""), "formato": "1"}
+            if source := sections.get("fonte") or sections.get("url"):
+                fields["fonte"] = source
+            return fields, body
     fields, lines = {}, []
     for line in text.strip().splitlines():
         match = re.match(r"^(titolo|title|fonte|url|formato|carousel)\s*:\s*(.*)$", line, re.I)
@@ -170,6 +180,7 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
         raise ValueError("Carousel: usa Narrativo, A sezioni o Verbatim")
     return {"format_code": code, "format_label": LABELS[code], "title": title,
             "source_name": source_name, "source": source, "plain": plain,
+            "summary": fields.get("sommario", ""),
             "blocks": blocks, "body": body, "questions": trail if code == "4" else questions,
             "theme": themes.get(theme, "narrative")}
 
@@ -266,7 +277,8 @@ def run_expert(payload):
         comics = style == "comics"
         tag = "blockquote" if style else "p"
         quote = re.search(r'«([^»]+)»|“([^”]+)”|"([^"\n]+)"', payload["plain"]) if style else None
-        fragment = next(group for group in quote.groups() if group is not None) if quote else payload["plain"]
+        fragment = (next(group for group in quote.groups() if group is not None) if quote
+                    else payload.get("summary") or payload["plain"])
         text = escape(fragment if quote else clip(fragment, 260 if style else 450))
         illustration = HERE / "assets" / "american-comics.jpg"
         if comics and illustration.exists():

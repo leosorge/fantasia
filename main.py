@@ -1,16 +1,35 @@
 """Preparazione del feed, conferma dopo deploy e anteprima locale."""
 import argparse
+import json
+import re
 import sys
 from pathlib import Path
 
 from drive_io import DriveManager, supported
 from expert_choice import choose_and_adapt, run_expert
-from pager import load, receipt, rotate, save, write
+from pager import initialize_feed, load, receipt, rotate, save, write
+
+
+def repair_legacy_news(state):
+    """Recover a structured article previously mistaken for a carousel."""
+    for item in state["slots"]:
+        if item["format_code"] != "3" or not item["title"].startswith("TITOLO "):
+            continue
+        node = re.search(r'id="slides">(.*?)</script>', item["html"], re.S)
+        if not node:
+            continue
+        slides = json.loads(node[1])["slides"]
+        raw = "\n\n".join(slide["text"] for slide in slides if slide["text"])
+        payload = choose_and_adapt(raw, "notizia")
+        if payload["format_code"] == "1":
+            item.update(run_expert(payload))
 
 
 def prepare(drive, root):
     root = Path(root)
     state = load(root / "state_12.json")
+    repair_legacy_news(state)
+    initialize_feed(state, root / "index.html", drive.archive)
     count = 0
     for item in drive.list_new():
         key = receipt(item)
