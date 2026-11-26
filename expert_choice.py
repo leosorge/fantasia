@@ -5,7 +5,7 @@ import re
 from hashlib import sha256
 from html import escape, unescape
 from pathlib import Path
-from random import randint
+from random import choice, randint
 from urllib.parse import urlsplit
 
 LABELS = {"1": "News", "2": "Quiz", "3": "Carousel", "4": "Game-PIP",
@@ -56,12 +56,14 @@ def safe_url(value):
 def parse_source(text):
     text = text.strip()
     if re.match(r"TITOLO[ \t]*\r?\n", text, re.I):
-        parts = re.split(r"(?mi)^(TITOLO|SOMMARIO|TESTO|QUIZ|FRASE[- ]SINTESI|FONTE|URL|FORMATO)[ \t]*\r?$", text)
+        parts = re.split(r"(?mi)^(TITOLO|SOMMARIO|TESTO|QUIZ|FRASE[- ]SINTESI|FONTE|URL|FORMATO|CAROUSEL|GIOCO|3D)[ \t]*\r?$", text)
         sections = {parts[i].lower(): parts[i + 1].strip() for i in range(1, len(parts), 2)}
         body = sections.get("testo") or sections.get("sommario")
         if body and sections.get("titolo"):
             fields = {"titolo": sections["titolo"], "sommario": sections.get("sommario", ""), "formato": sections.get("formato", ""),
                       "sintesi": sections.get("frase-sintesi") or sections.get("frase sintesi", "")}
+            if sections.keys() & {"carousel", "gioco", "3d"}:
+                fields["news_v1"] = sections
             if source := sections.get("fonte") or sections.get("url"):
                 fields["fonte"] = source
             return fields, body
@@ -138,6 +140,50 @@ def numeric_trail(text):
     return facts
 
 
+def section_blocks(section):
+    return [block.strip() for block in re.split(r"\n[ \t]*\n", section) if block.strip()]
+
+
+def section_fields(block):
+    fields = {}
+    for line in block.splitlines():
+        name, separator, value = line.partition(":")
+        key = name.strip().casefold()
+        if not separator or not value.strip() or key in fields:
+            return {}
+        fields[key] = value.strip()
+    return fields
+
+
+def section_questions(section, game=False):
+    blocks = section_blocks(section)
+    if game and len(blocks) != 3:
+        return []
+    questions = []
+    for index, block in enumerate(blocks):
+        fields = section_fields(block)
+        letters = ("ab", "bc", "abc")[index] if game else "abc"
+        prompt = fields.get("frase" if game else "domanda", "")
+        answer = fields.get("risposta", "").casefold()
+        options = [fields.get(letter, "") for letter in letters]
+        if not prompt or len(answer) != 1 or answer not in letters or not all(options):
+            return []
+        if len({option.casefold() for option in options}) != len(letters):
+            return []
+        if game:
+            if prompt.count("___") != 1 or any(
+                not re.fullmatch(r"\d+(?:[.,]\d+)?\s*%?", option) for option in options
+            ):
+                return []
+            questions.append({"t": prompt, "o": dict(zip(letters.upper(), options)), "answer": answer.upper()})
+        else:
+            if not fields.get("spiegazione"):
+                return []
+            questions.append({"t": prompt, "o": options, "answer": letters.index(answer),
+                              "explanation": fields["spiegazione"]})
+    return questions
+
+
 def choose_and_adapt(raw_text, source_name, forced_choice=None):
     fields, body = parse_source(raw_text)
     plain = " ".join(body.split())
@@ -166,6 +212,36 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
          and sentence.rstrip().endswith((".", "!"))),
         "",
     )
+    structured = fields.get("news_v1")
+    scene_details = ""
+    if structured:
+        questions = section_questions(structured.get("quiz", ""))
+        trail = section_questions(structured.get("gioco", ""), game=True)
+        blocks = section_blocks(structured.get("carousel", ""))
+        carousel_ok = len(blocks) >= 3 and all("\n" in block for block in blocks)
+        scene = section_fields(structured.get("3d", ""))
+        scene_code = {"processore": "5.1", "reticolo": "5.2", "satellite": "5.3"}.get(scene.get("scena", "").casefold())
+        if scene_code and scene.get("soggetto") and scene.get("didascalia"):
+            scene_details = f'{scene["soggetto"]}\n{scene["didascalia"]}'
+        synthesis = fields["sintesi"]
+        eligible = ["1"]
+        if questions:
+            eligible.append("2")
+        if carousel_ok:
+            eligible.append("3")
+        if trail:
+            eligible.append("4")
+        if scene_details:
+            eligible.append(scene_code)
+        if synthesis:
+            eligible.append("6")
+        if code == "5" and scene_details:
+            code = scene_code
+        if code and code not in eligible and not (
+            scene_details and code in SCENES or synthesis and code in QUOTES
+        ):
+            raise ValueError("Il file non contiene la sezione richiesta per il formato indicato")
+        code = code or choice(eligible)
     if not code and not editorial:
         code = "1"
     if not code:
@@ -208,7 +284,8 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
             "source_name": source_name, "source": source, "plain": plain,
             "summary": fields.get("sommario", ""), "synthesis": synthesis,
             "blocks": blocks, "body": body, "questions": trail if code == "4" else questions,
-            "theme": themes.get(theme, "narrative")}
+            "theme": "sectional" if structured else themes.get(theme, "narrative"),
+            "structured": bool(structured), "scene_details": scene_details}
 
 
 def js_data(value):
@@ -264,7 +341,8 @@ def run_expert(payload):
     source = source_link(payload)
     if code in SCENES:
         settings = js_data({"scene": SCENES[code], "color": "#24b8ad", "speed": 1})
-        card = render_3d(settings, payload["body"], source)
+        body = "\n\n".join(part for part in (payload.get("scene_details"), payload["body"]) if part)
+        card = render_3d(settings, body, source)
     elif code in {"2", "4"}:
         game = code == "4"
         script = (HERE / "assets" / ("qwat.js" if game else "interaction.js")).read_text(encoding="utf-8")
@@ -326,7 +404,7 @@ def run_expert(payload):
         style = QUOTES.get(code)
         comics = style == "comics"
         tag = "blockquote" if style else "p"
-        quote = re.search(r'«([^»]+)»|“([^”]+)”|"([^"\n]+)"', payload["plain"]) if style else None
+        quote = re.search(r'«([^»]+)»|“([^”]+)”|"([^"\n]+)"', payload["plain"]) if style and not payload.get("structured") else None
         fragment = (next(group for group in quote.groups() if group is not None) if quote
                     else (payload.get("synthesis") if style else payload.get("summary")) or payload["plain"])
         text = escape(fragment if quote else clip(fragment, 260 if style else 450))

@@ -75,8 +75,30 @@ class PipelineTests(unittest.TestCase):
         self.assertNotIn("Formato:", draft)
         self.assertNotIn(video["description"], draft)
         self.assertIn("https://www.youtube.com/watch?v=123456789ab", draft)
-        with patch("expert_choice.randint", return_value=2):
-            self.assertEqual(choose_and_adapt(draft, "youtube")["format_code"], "5.2")
+        with patch("expert_choice.choice", side_effect=lambda eligible: eligible[-2]):
+            self.assertEqual(choose_and_adapt(draft, "youtube")["format_code"], "5.3")
+
+    def test_producer_valid_sections_allow_all_formats(self):
+        from unittest.mock import Mock
+        video = {"id": "123456789ab", "title": "Prototipo", "channel": "Lab",
+                 "published": "2026-11-25", "seconds": 240}
+        translator = Mock()
+        translator.translate.return_value = (
+            "Processore sperimentale",
+            "Il processore integra 24 unità dedicate alla correzione degli errori. "
+            "I ricercatori hanno misurato un risparmio energetico del 15%. "
+            "Il laboratorio ha ripetuto le misurazioni in 8 sessioni.",
+        )
+        draft = notify(video, translator)
+        with patch("expert_choice.choice", return_value="4") as draw:
+            game = choose_and_adapt(draft, "youtube")
+        self.assertEqual(draw.call_args.args[0], ["1", "2", "3", "4", "5.1", "6"])
+        self.assertEqual([q["o"][q["answer"]] for q in game["questions"]], ["24", "15%", "8"])
+        self.assertIn("qwat", run_expert(game)["html"])
+        quiz = choose_and_adapt(draft, "youtube", "2")
+        self.assertTrue(quiz["questions"][0]["explanation"])
+        with self.assertRaises(ValueError):
+            choose_and_adapt(draft.replace("GIOCO\nFrase:", "GIOCO\nTesto:"), "youtube", "4")
 
     def test_preserve_demo_on_first_publication(self):
         with tempfile.TemporaryDirectory() as directory:

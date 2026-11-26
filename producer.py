@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from drive_io import DriveManager
+from expert_choice import clip, cloze, numeric_trail
 from translate_it import ItalianTranslator, TranslationError
 
 HERE = Path(__file__).resolve().parent
@@ -21,10 +22,62 @@ def notify(video, translator):
     seconds = video["seconds"]
     metadata = (f'{one_line(video["channel"])} ha pubblicato questo video il {video["published"][:10]}. '
                 f'Durata {seconds//60} min {seconds%60} s.')
-    copy = f'Titolo: {one_line(title)}\nFonte: https://www.youtube.com/watch?v={video_id}\n\n'
-    if description.strip():
-        return copy + description.strip() + "\n\n" + metadata
-    return copy + metadata
+    title = one_line(title)
+    channel = one_line(video["channel"])
+    date = video["published"][:10]
+    description = "\n".join(
+        f"— {line}" if re.fullmatch(
+            r"TITOLO|FONTE|URL|SOMMARIO|TESTO|CAROUSEL|QUIZ|GIOCO|3D|FRASE[- ]SINTESI|FORMATO",
+            line.strip(), re.I,
+        ) else line
+        for line in description.strip().splitlines()
+    )
+    introduction = f'Il video «{title}» è stato pubblicato su YouTube da {channel}.'
+    content_summary = next(
+        (line.strip() for line in re.split(r"(?<=[.!?])\s+|\n+", description)
+         if len(line.strip()) >= 35 and not re.search(r"https?://", line)),
+        "",
+    )
+    synopsis = clip(content_summary, 280) if content_summary else introduction
+    body = "\n\n".join(part for part in (introduction, description, metadata) if part)
+    trail = numeric_trail(description)
+    game = "\n\n".join(
+        "\n".join([f'Frase: {question["t"].strip()}',
+                   *(f"{letter}: {value}" for letter, value in question["o"].items()),
+                   f'Risposta: {question["answer"]}'])
+        for question in trail
+    )
+    scene = "reticolo"
+    if re.search(r"satellit|orbita|downlink", title, re.I):
+        scene = "satellite"
+    elif re.search(r"\b(?:chip|processor[ei]|cpu|gpu)\b", title, re.I):
+        scene = "processore"
+    quiz = (f"Domanda: In che anno {channel} ha pubblicato il video?\n"
+            f"A: {int(date[:4]) - 1}\nB: {date[:4]}\nC: {int(date[:4]) + 1}\n"
+            f"Risposta: B\nSpiegazione: La data di pubblicazione è {date}.")
+    questions = cloze(description)[:3]
+    if questions:
+        quiz = "\n\n".join(
+            "\n".join([f'Domanda: {item["t"].strip()}',
+                       *(f"{letter}: {option}" for letter, option in zip("ABC", item["o"])),
+                       f'Risposta: {"ABC"[item["answer"]]}',
+                       f'Spiegazione: {item["t"].replace("____", item["o"][item["answer"]], 1).strip()}'])
+            for item in questions
+        )
+    sections = [
+        ("TITOLO", title),
+        ("FONTE", f"https://www.youtube.com/watch?v={video_id}"),
+        ("SOMMARIO", synopsis),
+        ("TESTO", body),
+        ("CAROUSEL", f"Il tema del video\n{synopsis}\n\n"
+                     f"La pubblicazione\nIl video è uscito sul canale {channel} il {date}.\n\n"
+                     f"La durata\nIl video dura {seconds//60} minuti e {seconds%60} secondi."),
+        ("QUIZ", quiz),
+        ("GIOCO", game),
+        ("3D", f"Scena: {scene}\nSoggetto: {title}\nDidascalia: {synopsis}"),
+        ("FRASE-SINTESI", synopsis),
+    ]
+    return "\n\n".join(f"{heading}\n{value}".rstrip() for heading, value in sections) + "\n"
 
 
 def main():
