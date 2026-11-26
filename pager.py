@@ -119,9 +119,8 @@ def render_page(slots, heading="FANTASIA"):
     for item in slots:
         is_animation = item.get("format_code", "").startswith("5.")
         label = f'{item["position"]}. {"3D" if is_animation else item["format_label"]}'
-        fit = ' data-fit="3d"' if is_animation else ""
         cards.append(f'<section><h2>{escape(label)}</h2>'
-                     f'<iframe title="{escape(item["title"])}"{fit} '
+                     f'<iframe title="{escape(item["title"])}" '
                      'sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" '
                      f'srcdoc="{escape(item["html"], quote=True)}"></iframe></section>')
     body = "".join(cards) or "<p>Nessun contenuto nel feed.</p>"
@@ -131,18 +130,10 @@ def render_page(slots, heading="FANTASIA"):
         data = base64.b64encode(banner.read_bytes()).decode("ascii")
         masthead = (f'<img class="masthead" src="data:image/jpeg;base64,{data}" '
                     'alt="L’esploratore del Qwat, vignetta cromata nel laboratorio Q-13">')
-    fit_script = """<script>
-    window.addEventListener("message",event=>{
-      const data=event.data;
-      if(data?.type!=="fantasia-3d-height" || !Number.isInteger(data.height) || data.height<1 || data.height>2000000)return;
-      const frame=Array.from(document.querySelectorAll('iframe[data-fit="3d"]')).find(item=>item.contentWindow===event.source);
-      if(frame)frame.style.height=Math.max(Math.ceil(frame.clientWidth*1.25),data.height)+"px";
-    });
-    </script>"""
     return (f'<!doctype html><html lang="it"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>{escape(heading)}</title><style>{STYLE}</style></head>'
-            f'<body>{fit_script}<header><h1>{escape(heading)}</h1>{masthead}</header><main>{body}</main></body></html>')
+            f'<body><header><h1>{escape(heading)}</h1>{masthead}</header><main>{body}</main></body></html>')
 
 
 def write(path, content):

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from drive_io import DriveManager, supported
-from expert_choice import choose_and_adapt, parse_source, run_expert
+from expert_choice import choose_and_adapt, parse_source, run_expert, update_legacy_3d
 from pager import initialize_feed, load, receipt, rotate_batch, save, save_state, today, write
 
 
@@ -30,6 +30,9 @@ def prepare(drive, root):
     state = load(root / "state_12.json")
     repair_legacy_news(state)
     initialize_feed(state, root / "index.html", drive.archive)
+    for card in state["slots"]:
+        if card["format_code"].startswith("5."):
+            card["html"] = update_legacy_3d(card["html"])
     entries = []
     seen = set(state["processed"])
     for item in drive.list_new():

@@ -3,7 +3,7 @@ import base64
 import json
 import re
 from hashlib import sha256
-from html import escape
+from html import escape, unescape
 from pathlib import Path
 from random import randint
 from urllib.parse import urlsplit
@@ -231,16 +231,40 @@ def embedded_jpeg(filename):
     return base64.b64encode((HERE / "assets" / filename).read_bytes()).decode("ascii")
 
 
+def summarize_3d(body):
+    words = list(re.finditer(r"\S+", body))
+    if len(words) <= 300:
+        return body
+    excerpt = body[:words[299].end()]
+    endings = list(re.finditer(r"[.!?](?=\s|$)", excerpt[words[239].end():]))
+    if endings:
+        return excerpt[:words[239].end() + endings[-1].end()]
+    return excerpt + "…"
+
+
+def render_3d(settings, body, source):
+    template = (HERE / "assets" / "satellite.html").read_text(encoding="utf-8")
+    slots = {"SETTINGS": settings, "TEXT": escape(summarize_3d(body)), "SOURCE": source}
+    return re.sub(r"__FANTASIA_53_(SETTINGS|TEXT|SOURCE)__", lambda match: slots[match[1]], template)
+
+
+def update_legacy_3d(card):
+    if "fantasia-3d-height" not in card:
+        return card
+    description = re.search(r'<div class="description"><p>(.*?)</p>(.*?)</div>', card, re.S)
+    settings = re.search(r'<script id="settings" type="application/json">(.*?)</script>', card, re.S)
+    if description and settings:
+        return render_3d(settings[1], unescape(description[1]), description[2])
+    return card
+
+
 def run_expert(payload):
     code = payload["format_code"]
     title = escape(payload["title"])
     source = source_link(payload)
     if code in SCENES:
-        template = (HERE / "assets" / "satellite.html").read_text(encoding="utf-8")
-        slots = {"SETTINGS": js_data({
-            "scene": SCENES[code], "color": "#24b8ad", "speed": 1
-        }), "TEXT": escape(payload["body"]), "SOURCE": source}
-        card = re.sub(r"__FANTASIA_53_(SETTINGS|TEXT|SOURCE)__", lambda match: slots[match[1]], template)
+        settings = js_data({"scene": SCENES[code], "color": "#24b8ad", "speed": 1})
+        card = render_3d(settings, payload["body"], source)
     elif code in {"2", "4"}:
         game = code == "4"
         script = (HERE / "assets" / ("qwat.js" if game else "interaction.js")).read_text(encoding="utf-8")
