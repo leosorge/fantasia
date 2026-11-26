@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amministrazione Fantasia</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui;background:#101820;color:#eef6f8}
+*{box-sizing:border-box}body{margin:auto;padding:24px;max-width:1200px}
+h1{margin:.4em 0 .8em}h2{font-size:1.2rem}a{color:#95e6ce}button,textarea,select,input{font:inherit}
+section,article{background:#192831;border:1px solid #39515d;border-radius:12px;padding:16px}
+.editor{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}
+label{display:block;margin:.6em 0}button,select{border:1px solid #5c827e;border-radius:7px;padding:.5em .65em;background:#213842;color:inherit}
+button{cursor:pointer}button.danger{color:#ffcdcc;border-color:#a86565}
+textarea{width:100%;min-height:3.5rem;padding:8px;background:#101820;color:inherit;border:1px solid #526873;border-radius:6px}
+textarea[data-key="TESTO"]{min-height:9rem}textarea[data-key="QUIZ"],textarea[data-key="GIOCO"],textarea[data-key="CAROUSEL"]{min-height:7rem}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.preview{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;background:#101820;border-radius:8px;padding:12px}
+#request{min-height:8rem}#send{margin-top:16px}#cards{max-width:100%}
+@media(max-width:760px){body{padding:15px}.editor{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<a href="../">← Fantasia</a>
+<h1>Amministrazione</h1>
+<section>
+<label for="cards">Scheda pubblicata</label>
+<div class="controls"><select id="cards"></select><button id="remove" class="danger" type="button">Rimuovi dal feed</button></div>
+<p id="source" role="status"></p>
+<label for="file">Carica il sorgente Fantasia News v1 (.txt)</label>
+<input type="file" id="file" accept=".txt,text/plain">
+</section>
+<div class="editor" id="editor"></div>
+<section id="send" hidden>
+<h2>Conferma su GitHub</h2>
+<p>Copia la richiesta. In GitHub scegli <strong>Run workflow</strong>, incollala nel campo <strong>Richiesta JSON copiata dal pannello Fantasia</strong> e avvia il workflow.</p>
+<label for="request">Richiesta JSON</label>
+<textarea id="request" readonly></textarea>
+<div class="controls"><button id="copy" type="button">Copia richiesta</button>
+<a href="https://github.com/leosorge/fantasia/actions/workflows/fantasia.yml" target="_blank" rel="noopener">Apri GitHub Actions ↗</a></div>
+<p id="status" role="status"></p>
+</section>
+<template id="variant">
+<article>
+<h2></h2>
+<div class="controls">
+<label>Formato <select class="format"><option value="1">News</option><option value="2">Quiz</option><option value="3">Carousel</option><option value="4">Game-PIP</option><option value="5">3D</option><option value="6">Quote Card</option></select></label>
+<label>Lingua di pubblicazione <select class="language"><option value="it">Italiano</option><option value="en">Inglese</option><option value="zh">Cinese</option><option value="ja">Giapponese</option></select></label>
+</div>
+<div class="fields"></div>
+<h3>Estratto per il confronto</h3>
+<p>La traduzione e il rendering definitivo avvengono durante la pubblicazione.</p>
+<div class="preview" aria-live="polite"></div>
+<button type="button" class="publish">Prepara nuova scheda</button>
+</article>
+</template>
+<script>
+"use strict";
+const sections = ["TITOLO","FONTE","SOMMARIO","TESTO","CAROUSEL","QUIZ","GIOCO","3D","FRASE-SINTESI"];
+const cards = document.querySelector("#cards");
+const source = document.querySelector("#source");
+const request = document.querySelector("#request");
+const send = document.querySelector("#send");
+const status = document.querySelector("#status");
+let feed = [];
+const makeVariant = name => {
+  const node = document.querySelector("#variant").content.firstElementChild.cloneNode(true);
+  node.querySelector("h2").textContent = "Variante " + name;
+  const fields = {};
+  for (const key of sections) {
+    const label = document.createElement("label");
+    label.textContent = key;
+    const field = document.createElement("textarea");
+    field.dataset.key = key;
+    label.append(field);
+    node.querySelector(".fields").append(label);
+    fields[key] = field;
+  }
+  const format = node.querySelector(".format");
+  const language = node.querySelector(".language");
+  const preview = node.querySelector(".preview");
+  const render = () => {
+    const key = ["SOMMARIO","QUIZ","CAROUSEL","GIOCO","3D","FRASE-SINTESI"][Number(format.value)-1];
+    preview.textContent = [fields.TITOLO.value, fields[key].value].filter(Boolean).join("\n\n") || "Carica un sorgente o compila le sezioni.";
+  };
+  node.addEventListener("input", render);
+  node.querySelector(".publish").addEventListener("click", () => {
+    if (!cards.value || !fields.TITOLO.value.trim() || !fields.TESTO.value.trim()) {
+      source.textContent = "Seleziona una scheda e compila almeno TITOLO e TESTO.";
+      return;
+    }
+    const text = sections.map(key => key + "\n" + fields[key].value.trim()).join("\n\n") + "\n";
+    if (new TextEncoder().encode(text).length > 45000) {
+      source.textContent = "Il sorgente supera 45 KB.";
+      return;
+    }
+    stage({action:"publish",id:crypto.randomUUID(),key:cards.value,format:format.value,language:language.value,text});
+  });
+  document.querySelector("#editor").append(node);
+  render();
+  return {fields,format,render};
+};
+function stage(data) {
+  request.value = JSON.stringify(data);
+  status.textContent = "";
+  send.hidden = false;
+  send.scrollIntoView({block:"start"});
+  request.focus();
+  request.select();
+}
+function selected() {
+  const card = feed.find(item => item.key === cards.value);
+  if (!card) return;
+  source.replaceChildren();
+  if (card.source_archived) {
+    const link = document.createElement("a");
+    link.href = "https://drive.google.com/drive/folders/1noKbzSbLnK4VUjWYo7y4DgJ6eL7EdQC2";
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Apri old_txt";
+    source.append(link, " e scarica " + card.key + ".txt.");
+  } else {
+    source.textContent = "Questa scheda precede l’archivio dei sorgenti. Carica il .txt originale se lo hai.";
+  }
+}
+const variants = [makeVariant("A"), makeVariant("B")];
+document.querySelector("#file").addEventListener("change", async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const parts = (await file.text()).replace(/^\uFEFF/,"").replace(/\r\n/g,"\n")
+    .split(/^(TITOLO|FONTE|SOMMARIO|TESTO|CAROUSEL|QUIZ|GIOCO|3D|FRASE[- ]SINTESI)[ \t]*$/gmi);
+  for (const variant of variants) {
+    for (const field of Object.values(variant.fields)) field.value = "";
+    for (let i=1; i<parts.length; i+=2) {
+      const key = parts[i].toUpperCase().replace("FRASE SINTESI","FRASE-SINTESI");
+      variant.fields[key].value = parts[i+1].trim();
+    }
+    variant.render();
+  }
+});
+cards.addEventListener("change", () => {
+  selected();
+  const code = feed.find(item => item.key === cards.value)?.format_code[0];
+  if ("123456".includes(code ?? "0")) {
+    variants[0].format.value = code;
+    variants[0].render();
+  }
+});
+document.querySelector("#remove").addEventListener("click", () => {
+  if (cards.value) stage({action:"remove",key:cards.value});
+});
+document.querySelector("#copy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(request.value);
+    status.textContent = "Richiesta copiata.";
+  } catch {
+    request.select();
+    status.textContent = "Premi Ctrl+C per copiare la richiesta selezionata.";
+  }
+});
+fetch("feed.json", {cache:"no-cache"}).then(response => {
+  if (!response.ok) throw new Error();
+  return response.json();
+}).then(data => {
+  feed = data;
+  for (const card of feed) cards.add(new Option(card.position + ". " + card.title + " · " + card.format_label, card.key));
+  selected();
+}).catch(() => { source.textContent = "Elenco schede non aggiornato. È necessario un ciclo di pubblicazione."; });
+</script>
+</body>
+</html>
