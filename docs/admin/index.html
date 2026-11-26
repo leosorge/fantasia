@@ -15,7 +15,9 @@ button{cursor:pointer}button.danger{color:#ffcdcc;border-color:#a86565}
 textarea{width:100%;min-height:3.5rem;padding:8px;background:#101820;color:inherit;border:1px solid #526873;border-radius:6px}
 textarea[data-key="TESTO"]{min-height:9rem}textarea[data-key="QUIZ"],textarea[data-key="GIOCO"],textarea[data-key="CAROUSEL"]{min-height:7rem}
 .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.preview{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;background:#101820;border-radius:8px;padding:12px}
+.preview{background:#101820;border-radius:8px;padding:12px;margin:8px 0}
+.preview iframe{display:block;width:100%;max-width:480px;aspect-ratio:4/5;border:0;margin:auto}
+.preview p{margin:0 0 8px}
 #request{min-height:8rem}#send{margin-top:16px}#cards{max-width:100%}
 @media(max-width:760px){body{padding:15px}.editor{grid-template-columns:1fr}}
 </style>
@@ -48,9 +50,10 @@ textarea[data-key="TESTO"]{min-height:9rem}textarea[data-key="QUIZ"],textarea[da
 <label>Lingua di pubblicazione <select class="language"><option value="it">Italiano</option><option value="en">Inglese</option><option value="zh">Cinese</option><option value="ja">Giapponese</option></select></label>
 </div>
 <div class="fields"></div>
-<h3>Estratto per il confronto</h3>
-<p>La traduzione e il rendering definitivo avvengono durante la pubblicazione.</p>
-<div class="preview" aria-live="polite"></div>
+<h3>Anteprima interattiva</h3>
+<p>La scheda usa il testo nell’editor. La traduzione nella lingua scelta avviene alla pubblicazione.</p>
+<div class="controls"><button type="button" class="generate">Genera anteprima</button></div>
+<div class="preview"><p role="status">Carica un sorgente o compila le sezioni.</p><iframe title="Anteprima della scheda" sandbox="allow-scripts" hidden></iframe></div>
 <button type="button" class="publish">Prepara nuova scheda</button>
 </article>
 </template>
@@ -63,11 +66,70 @@ const request = document.querySelector("#request");
 const send = document.querySelector("#send");
 const status = document.querySelector("#status");
 let feed = [];
+let engine;
+let sequence = 0;
+const pending = new Map();
+const workerSource = () => {
+  const runtime = "https://cdn.jsdelivr.net/pyodide/v0.29.1/full/";
+  const source = "https://raw.githubusercontent.com/leosorge/fantasia/main/";
+  const assets = ["satellite.html","qwat.js","interaction.js","quote-styles.css",
+    "american-comics.jpg","carousel-quantum.jpg","stile-neroverde-carousel-brand.json",
+    "carousel-builder-v2.14.3.css","carousel-builder-LICENSE.txt","carousel-feed.js"];
+  async function initialize() {
+    importScripts(runtime+"pyodide.js");
+    const python = await loadPyodide({indexURL:runtime});
+    python.FS.mkdir("assets");
+    await Promise.all(["expert_choice.py", ...assets.map(name => "assets/"+name)].map(async path => {
+      const response = await fetch(source+path);
+      if (!response.ok) throw new Error("Risorsa Fantasia non disponibile: " + path);
+      python.FS.writeFile(path, new Uint8Array(await response.arrayBuffer()));
+    }));
+    python.runPython("from expert_choice import choose_and_adapt, run_expert");
+    return python;
+  }
+  let module;
+  self.onmessage = async ({data}) => {
+    try {
+      module ||= initialize();
+      const python = await module;
+      python.globals.set("preview_source", data.text);
+      python.globals.set("preview_code", data.format);
+      const html = python.runPython('run_expert(choose_and_adapt(preview_source, "anteprima", preview_code))["html"]');
+      self.postMessage({id:data.id,html});
+    } catch (error) {
+      self.postMessage({id:data.id,error:error.message.replace(/^.*(?:ValueError:|Error:)\s*/s,"").trim()});
+    }
+  };
+};
+function generatePreview(text, format) {
+  if (!engine) {
+    const url = URL.createObjectURL(new Blob(["("+workerSource.toString()+")()"], {type:"text/javascript"}));
+    engine = new Worker(url);
+    URL.revokeObjectURL(url);
+    engine.onmessage = ({data}) => {
+      const job = pending.get(data.id);
+      pending.delete(data.id);
+      if (job) data.error ? job.reject(new Error(data.error)) : job.resolve(data.html);
+    };
+    engine.onerror = () => {
+      for (const job of pending.values()) job.reject(new Error("Il motore di anteprima non è disponibile."));
+      pending.clear();
+      engine.terminate();
+      engine = null;
+    };
+  }
+  const id = ++sequence;
+  return new Promise((resolve,reject) => {
+    pending.set(id,{resolve,reject});
+    engine.postMessage({id,text,format});
+  });
+}
 const makeVariant = name => {
   const node = document.querySelector("#variant").content.firstElementChild.cloneNode(true);
   node.querySelector("h2").textContent = "Variante " + name;
   const fields = {};
-  for (const key of sections) {
+  const editorKeys = sections.flatMap(key => key === "3D" ? ["Scena","Soggetto","Didascalia"] : [key]);
+  for (const key of editorKeys) {
     const label = document.createElement("label");
     label.textContent = key;
     const field = document.createElement("textarea");
@@ -79,17 +141,44 @@ const makeVariant = name => {
   const format = node.querySelector(".format");
   const language = node.querySelector(".language");
   const preview = node.querySelector(".preview");
+  const frame = preview.querySelector("iframe");
+  const feedback = preview.querySelector("p");
+  const button = node.querySelector(".generate");
+  const serialize = () => sections.map(key => key + "\n" + (key === "3D"
+    ? ["Scena","Soggetto","Didascalia"].map(name => name + ": " + fields[name].value.trim().replace(/\s+/g," ")).join("\n")
+    : fields[key].value.trim())).join("\n\n") + "\n";
+  let revision = 0;
   const render = () => {
-    const key = ["SOMMARIO","QUIZ","CAROUSEL","GIOCO","3D","FRASE-SINTESI"][Number(format.value)-1];
-    preview.textContent = [fields.TITOLO.value, fields[key].value].filter(Boolean).join("\n\n") || "Carica un sorgente o compila le sezioni.";
+    revision++;
+    feedback.textContent = "Genera l’anteprima dopo aver modificato la variante.";
   };
   node.addEventListener("input", render);
+  button.addEventListener("click", async () => {
+    if (!fields.TITOLO.value.trim() || !fields.TESTO.value.trim()) {
+      feedback.textContent = "Compila TITOLO e TESTO.";
+      return;
+    }
+    const current = revision;
+    button.disabled = true;
+    feedback.textContent = "Generazione in corso…";
+    try {
+      const html = await generatePreview(serialize(),format.value);
+      if (current !== revision) return;
+      frame.srcdoc = html;
+      frame.hidden = false;
+      feedback.textContent = "";
+    } catch (error) {
+      if (current === revision) feedback.textContent = error.message || "Anteprima non disponibile.";
+    } finally {
+      button.disabled = false;
+    }
+  });
   node.querySelector(".publish").addEventListener("click", () => {
     if (!cards.value || !fields.TITOLO.value.trim() || !fields.TESTO.value.trim()) {
       source.textContent = "Seleziona una scheda e compila almeno TITOLO e TESTO.";
       return;
     }
-    const text = sections.map(key => key + "\n" + fields[key].value.trim()).join("\n\n") + "\n";
+    const text = serialize();
     if (new TextEncoder().encode(text).length > 45000) {
       source.textContent = "Il sorgente supera 45 KB.";
       return;
@@ -97,7 +186,6 @@ const makeVariant = name => {
     stage({action:"publish",id:crypto.randomUUID(),key:cards.value,format:format.value,language:language.value,text});
   });
   document.querySelector("#editor").append(node);
-  render();
   return {fields,format,render};
 };
 function stage(data) {
@@ -133,7 +221,17 @@ document.querySelector("#file").addEventListener("change", async event => {
     for (const field of Object.values(variant.fields)) field.value = "";
     for (let i=1; i<parts.length; i+=2) {
       const key = parts[i].toUpperCase().replace("FRASE SINTESI","FRASE-SINTESI");
-      variant.fields[key].value = parts[i+1].trim();
+      if (key === "3D") {
+        for (const line of parts[i+1].split("\n")) {
+          const match = /^(Scena|Soggetto|Didascalia):\s*(.*)$/i.exec(line.trim());
+          if (match) {
+            const name = match[1][0].toUpperCase() + match[1].slice(1).toLowerCase();
+            variant.fields[name].value = match[2];
+          }
+        }
+      } else {
+        variant.fields[key].value = parts[i+1].trim();
+      }
     }
     variant.render();
   }
@@ -164,7 +262,7 @@ fetch("feed.json", {cache:"no-cache"}).then(response => {
 }).then(data => {
   feed = data;
   for (const card of feed) cards.add(new Option(card.position + ". " + card.title + " · " + card.format_label, card.key));
-  selected();
+  cards.dispatchEvent(new Event("change"));
 }).catch(() => { source.textContent = "Elenco schede non aggiornato. È necessario un ciclo di pubblicazione."; });
 </script>
 </body>
