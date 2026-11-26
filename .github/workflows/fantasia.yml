@@ -74,7 +74,7 @@ jobs:
           path: ~/.cache/huggingface/hub
           key: fantasia-translation-m2m100-418m
       - name: Installa il traduttore italiano
-        if: inputs.admin_request || vars.FANTASIA_PRODUCER == 'intersearQ'
+        if: ${{ (inputs.admin_request && fromJSON(inputs.admin_request).action == 'publish') || (!inputs.admin_request && vars.FANTASIA_PRODUCER == 'intersearQ') }}
         id: translation
         continue-on-error: true
         run: |
@@ -102,7 +102,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- docs state_12.json
+          git add -- docs state_12.json Qlist.txt
           if ! git diff --cached --quiet; then
             git commit -m 'Aggiorna il feed FANTASIA'
             git push origin HEAD
