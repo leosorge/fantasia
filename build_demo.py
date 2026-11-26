@@ -32,7 +32,7 @@ SAMPLES = [
     ("1", "Lo stack aperto per i chip AI", COMPILATION_COPY),
     ("6.3", "Beatles · Son of Flowers", "All I know about light I learnt from Vincos"),
     ("3", "Dal modello AI al processore", COMPILATION_COPY),
-    ("5.2", "Reticolo", "Un qubit logico distribuisce l’informazione su più qubit fisici.\n\nLa griglia mostra la disposizione delle celle."),
+    ("5", "Processore fotonico sul banco ottico", PHOTONICS_COPY),
     ("5.1", "Processore", "La parte centrale del chip elabora i segnali. I contatti lungo i bordi collegano il processore al circuito."),
     ("6.2", "Prism", "All I know about light I learnt from Vincos"),
     ("1", "Q.ANT porta la fotonica nel rack", PHOTONICS_COPY),
@@ -51,6 +51,13 @@ def main():
             source = PHOTONICS if body == PHOTONICS_COPY else COMPILATION if body == COMPILATION_COPY else ""
             if code == "1" and not source:
                 title, body, source = "Acceleratori AI e compilazione", COMPILATION_COPY, COMPILATION
+            if code == "5":
+                raw = (f"TITOLO\n{title}\n\nFONTE\n{source}\n\nTESTO\n{body}\n\n"
+                       "3D\nScena: Processore fotonico su un banco ottico, con guide d’onda illuminate "
+                       "e fibre sui bordi.\nSoggetto: Processore fotonico\n"
+                       "Didascalia: Le guide d’onda collegano il chip alle fibre.\n\nFORMATO\n5\n")
+                write(demo / "new" / f"{i:02}.txt", raw)
+                continue
             metadata = f"Fonte: {source}\n" if source else ""
             if code == "3" and source == COMPILATION:
                 metadata += "Carousel: A sezioni\n"
@@ -58,6 +65,7 @@ def main():
         assert prepare(DemoDrive(demo), demo) == 14
         state = load(demo / "state_12.json")
         assert [card["format_code"] for card in state["slots"][:3]] == ["3", "4", "6.1"]
+        assert any(card["format_code"] == "5.4" and "banco ottico" in card["html"] for card in state["slots"])
         assert len(list((demo / "old").glob("*.html"))) == 2
         write(OUT / "FANTASIA_Demo.html", render_page(state["slots"], "FANTASIA — Demo"))
         with ZipFile(OUT / "FANTASIA.zip", "w", compression=ZIP_DEFLATED) as archive:

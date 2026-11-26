@@ -47,11 +47,7 @@ def notify(video, translator):
                    f'Risposta: {question["answer"]}'])
         for question in trail
     )
-    scene = "reticolo"
-    if re.search(r"satellit|orbita|downlink", title, re.I):
-        scene = "satellite"
-    elif re.search(r"\b(?:chip|processor[ei]|cpu|gpu)\b", title, re.I):
-        scene = "processore"
+    scene = clip(f"{title}. {synopsis}" if content_summary else title, 360)
     quiz = (f"Domanda: In che anno {channel} ha pubblicato il video?\n"
             f"A: {int(date[:4]) - 1}\nB: {date[:4]}\nC: {int(date[:4]) + 1}\n"
             f"Risposta: B\nSpiegazione: La data di pubblicazione è {date}.")

@@ -76,7 +76,7 @@ class PipelineTests(unittest.TestCase):
         self.assertNotIn(video["description"], draft)
         self.assertIn("https://www.youtube.com/watch?v=123456789ab", draft)
         with patch("expert_choice.choice", side_effect=lambda eligible: eligible[-2]):
-            self.assertEqual(choose_and_adapt(draft, "youtube")["format_code"], "5.3")
+            self.assertEqual(choose_and_adapt(draft, "youtube")["format_code"], "5.4")
 
     def test_producer_valid_sections_allow_all_formats(self):
         from unittest.mock import Mock
@@ -92,13 +92,25 @@ class PipelineTests(unittest.TestCase):
         draft = notify(video, translator)
         with patch("expert_choice.choice", return_value="4") as draw:
             game = choose_and_adapt(draft, "youtube")
-        self.assertEqual(draw.call_args.args[0], ["1", "2", "3", "4", "5.1", "6"])
+        self.assertEqual(draw.call_args.args[0], ["1", "2", "3", "4", "5.4", "6"])
         self.assertEqual([q["o"][q["answer"]] for q in game["questions"]], ["24", "15%", "8"])
         self.assertIn("qwat", run_expert(game)["html"])
         quiz = choose_and_adapt(draft, "youtube", "2")
         self.assertTrue(quiz["questions"][0]["explanation"])
         with self.assertRaises(ValueError):
             choose_and_adapt(draft.replace("GIOCO\nFrase:", "GIOCO\nTesto:"), "youtube", "4")
+
+    def test_free_scene_and_historical_models(self):
+        source = ("TITOLO\nStesso titolo\n\nTESTO\nUn testo per la demo.\n\n"
+                  "3D\nScena: {}\nSoggetto: Prototipo\nDidascalia: Dettaglio del prototipo.")
+        scenes = ["Processore fotonico sul banco ottico con fibre", "Rack di server con pannelli"]
+        cards = [run_expert(choose_and_adapt(source.format(scene), "x", "5")) for scene in scenes]
+        for card, scene in zip(cards, scenes):
+            self.assertEqual(card["format_code"], "5.4")
+            self.assertIn(f'"description": "{scene}"', card["html"])
+            self.assertIn("describedGeometry", card["html"])
+        for scene, code in {"processore": "5.1", "reticolo": "5.2", "satellite": "5.3"}.items():
+            self.assertEqual(choose_and_adapt(source.format(scene), "x", "5")["format_code"], code)
 
     def test_preserve_demo_on_first_publication(self):
         with tempfile.TemporaryDirectory() as directory:

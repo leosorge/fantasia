@@ -9,9 +9,9 @@ from random import choice, randint
 from urllib.parse import urlsplit
 
 LABELS = {"1": "News", "2": "Quiz", "3": "Carousel", "4": "Game-PIP",
-          "5.1": "3D", "5.2": "3D", "5.3": "3D",
+          "5.1": "3D", "5.2": "3D", "5.3": "3D", "5.4": "3D",
           "6.1": "American Comics", "6.2": "Prism", "6.3": "Beatles · Son of Flowers"}
-SCENES = {"5.1": "chip", "5.2": "lattice", "5.3": "satellite"}
+SCENES = {"5.1": "chip", "5.2": "lattice", "5.3": "satellite", "5.4": "described"}
 QUOTES = {"6.1": "comics", "6.2": "prism", "6.3": "beatles"}
 HERE = Path(__file__).resolve().parent
 CSS = """
@@ -214,13 +214,17 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
     )
     structured = fields.get("news_v1")
     scene_details = ""
+    scene_description = ""
     if structured:
         questions = section_questions(structured.get("quiz", ""))
         trail = section_questions(structured.get("gioco", ""), game=True)
         blocks = section_blocks(structured.get("carousel", ""))
         carousel_ok = len(blocks) >= 3 and all("\n" in block for block in blocks)
         scene = section_fields(structured.get("3d", ""))
-        scene_code = {"processore": "5.1", "reticolo": "5.2", "satellite": "5.3"}.get(scene.get("scena", "").casefold())
+        scene_description = scene.get("scena", "")
+        scene_code = {"processore": "5.1", "reticolo": "5.2", "satellite": "5.3"}.get(
+            scene_description.casefold(), "5.4" if scene_description else ""
+        )
         if scene_code and scene.get("soggetto") and scene.get("didascalia"):
             scene_details = f'{scene["soggetto"]}\n{scene["didascalia"]}'
         synthesis = fields["sintesi"]
@@ -238,7 +242,8 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
         if code == "5" and scene_details:
             code = scene_code
         if code and code not in eligible and not (
-            scene_details and code in SCENES or synthesis and code in QUOTES
+            (scene_details and code in SCENES and (code != "5.4" or scene_code == "5.4"))
+            or (synthesis and code in QUOTES)
         ):
             raise ValueError("Il file non contiene la sezione richiesta per il formato indicato")
         code = code or choice(eligible)
@@ -270,6 +275,8 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
             code = eligible[int.from_bytes(digest, "big") % len(eligible)]
     if code in {"5", "6"}:
         code = f"{code}.{randint(1, 3)}"
+    if code == "5.4" and not scene_description:
+        raise ValueError("3D: serve una descrizione libera nel campo Scena")
     if code not in LABELS:
         raise ValueError("Formato ammesso: 1–6 oppure una variante esplicita da 5.1 a 5.3 o da 6.1 a 6.3")
     if code == "2" and not questions:
@@ -285,7 +292,8 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
             "summary": fields.get("sommario", ""), "synthesis": synthesis,
             "blocks": blocks, "body": body, "questions": trail if code == "4" else questions,
             "theme": "sectional" if structured else themes.get(theme, "narrative"),
-            "structured": bool(structured), "scene_details": scene_details}
+            "structured": bool(structured), "scene_details": scene_details,
+            "scene_description": scene_description}
 
 
 def js_data(value):
@@ -340,7 +348,8 @@ def run_expert(payload):
     title = escape(payload["title"])
     source = source_link(payload)
     if code in SCENES:
-        settings = js_data({"scene": SCENES[code], "color": "#24b8ad", "speed": 1})
+        settings = js_data({"scene": SCENES[code], "description": payload.get("scene_description", ""),
+                            "color": "#24b8ad", "speed": 1})
         body = "\n\n".join(part for part in (payload.get("scene_details"), payload["body"]) if part)
         card = render_3d(settings, body, source)
     elif code in {"2", "4"}:
