@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from drive_io import DriveManager, supported
-from expert_choice import choose_and_adapt, run_expert
+from expert_choice import choose_and_adapt, parse_source, run_expert
 from pager import initialize_feed, load, receipt, rotate_batch, save, save_state, today, write
 
 
@@ -20,9 +20,9 @@ def repair_legacy_news(state):
             continue
         slides = json.loads(node[1])["slides"]
         raw = "\n\n".join(slide["text"] for slide in slides if slide["text"])
-        payload = choose_and_adapt(raw, "notizia")
-        if payload["format_code"] == "1":
-            item.update(run_expert(payload))
+        fields, _ = parse_source(raw)
+        if "sommario" in fields:
+            item.update(run_expert(choose_and_adapt(raw, "notizia", forced_choice="1")))
 
 
 def prepare(drive, root):
