@@ -62,6 +62,15 @@ textarea[data-key="TESTO"]{min-height:9rem}textarea[data-key="QUIZ"],textarea[da
 <label>Lingua di pubblicazione <select class="language"><option value="it">Italiano</option><option value="en">Inglese</option><option value="zh">Cinese</option><option value="ja">Giapponese</option></select></label>
 </div>
 <div class="fields"></div>
+<div class="carousel-controls" hidden>
+<label>Direzione visiva <select class="carousel-direction">
+<option value="photographic">Fotografico</option><option value="hand-drawn">Disegnato a mano</option>
+<option value="illustrated-collage">Collage illustrato</option><option value="editorial-geometric">Editoriale geometrico</option>
+</select></label>
+<label>Manifest Carousel Builder (.json) <input type="file" class="carousel-file" accept=".json,application/json"></label>
+<label>Manifest <textarea class="carousel-manifest" spellcheck="false"></textarea></label>
+<p>Usa il manifest e la copertina della direzione scelta. Pubblica dopo l’approvazione della prova visiva.</p>
+</div>
 <h3>Anteprima interattiva</h3>
 <p>La scheda usa il testo nell’editor. La traduzione nella lingua scelta avviene alla pubblicazione.</p>
 <div class="controls"><button type="button" class="generate">Genera anteprima</button></div>
@@ -106,7 +115,7 @@ const workerSource = () => {
       const python = await module;
       python.globals.set("preview_source", data.text);
       python.globals.set("preview_code", data.format);
-      const html = python.runPython('run_expert(choose_and_adapt(preview_source, "anteprima", preview_code))["html"]');
+      const html = python.runPython('run_expert(choose_and_adapt(preview_source, "anteprima", preview_code), preview=True)["html"]');
       self.postMessage({id:data.id,html});
     } catch (error) {
       self.postMessage({id:data.id,error:error.message.replace(/^.*(?:ValueError:|Error:)\s*/s,"").trim()});
@@ -151,17 +160,44 @@ const makeVariant = name => {
     fields[key] = field;
   }
   const format = node.querySelector(".format");
+  const carousel = node.querySelector(".carousel-controls");
+  const direction = node.querySelector(".carousel-direction");
+  const manifestField = node.querySelector(".carousel-manifest");
+  const manifestRequest = () => {
+    let manifest;
+    try { manifest = JSON.parse(manifestField.value); }
+    catch { throw new Error("Carica un manifest JSON di Carousel Builder valido."); }
+    if (manifest?.brand?.visual_direction?.mode !== direction.value) {
+      throw new Error("Il manifest e la direzione visiva scelta devono coincidere.");
+    }
+    return manifest;
+  };
+  const importManifest = text => {
+    manifestField.value = text;
+    try {
+      const mode = JSON.parse(text)?.brand?.visual_direction?.mode;
+      if ([...direction.options].some(option => option.value === mode)) direction.value = mode;
+    } catch {}
+    render();
+  };
+  node.querySelector(".carousel-file").addEventListener("change", async event => {
+    if (event.target.files[0]) importManifest(await event.target.files[0].text());
+  });
   const language = node.querySelector(".language");
   const preview = node.querySelector(".preview");
   const frame = preview.querySelector("iframe");
   const feedback = preview.querySelector("p");
   const button = node.querySelector(".generate");
-  const serialize = () => sections.map(key => key + "\n" + (key === "3D"
+  const serialize = () => {
+    const text = sections.map(key => key + "\n" + (key === "3D"
     ? ["Scena","Soggetto","Didascalia"].map(name => name + ": " + fields[name].value.trim().replace(/\s+/g," ")).join("\n")
     : fields[key].value.trim())).join("\n\n") + "\n";
+    return format.value === "3" ? text + "\nMANIFEST-CAROUSEL\n" + JSON.stringify(manifestRequest()) + "\n" : text;
+  };
   let revision = 0;
   const render = () => {
     revision++;
+    carousel.hidden = format.value !== "3";
     feedback.textContent = "Genera l’anteprima dopo aver modificato la variante.";
   };
   node.addEventListener("input", render);
@@ -190,7 +226,18 @@ const makeVariant = name => {
       source.textContent = "Seleziona una scheda e compila almeno TITOLO e TESTO.";
       return;
     }
-    const text = serialize();
+    let text;
+    try {
+      text = serialize();
+      if (format.value === "3") {
+        const manifest = manifestRequest();
+        if (manifest.proof?.approved !== true || !["prova_visuale_approvata","rendering","qa","consegnato"].includes(manifest.workflow_state))
+          throw new Error("Il manifest richiede la prova visiva approvata.");
+      }
+    } catch (error) {
+      feedback.textContent = error.message;
+      return;
+    }
     if (new TextEncoder().encode(text).length > 45000) {
       source.textContent = "Il sorgente supera 45 KB.";
       return;
@@ -198,7 +245,7 @@ const makeVariant = name => {
     stage({action:"publish",id:crypto.randomUUID(),key:cards.value,format:format.value,language:language.value,text});
   });
   document.querySelector("#editor").append(node);
-  return {fields,format,render};
+  return {fields,format,render,importManifest};
 };
 function stage(data) {
   request.value = JSON.stringify(data);
@@ -284,12 +331,14 @@ document.querySelector("#file").addEventListener("change", async event => {
   const file = event.target.files[0];
   if (!file) return;
   const parts = (await file.text()).replace(/^\uFEFF/,"").replace(/\r\n/g,"\n")
-    .split(/^(TITOLO|FONTE|CATEGORIE|SOMMARIO|TESTO|CAROUSEL|QUIZ|GIOCO|3D|FRASE[- ]SINTESI)[ \t]*$/gmi);
+    .split(/^(TITOLO|FONTE|CATEGORIE|SOMMARIO|TESTO|CAROUSEL|QUIZ|GIOCO|3D|FRASE[- ]SINTESI|MANIFEST-CAROUSEL)[ \t]*$/gmi);
   for (const variant of variants) {
     for (const field of Object.values(variant.fields)) field.value = "";
     for (let i=1; i<parts.length; i+=2) {
       const key = parts[i].toUpperCase().replace("FRASE SINTESI","FRASE-SINTESI");
-      if (key === "3D") {
+      if (key === "MANIFEST-CAROUSEL") {
+        variant.importManifest(parts[i+1].trim());
+      } else if (key === "3D") {
         for (const line of parts[i+1].split("\n")) {
           const match = /^(Scena|Soggetto|Didascalia):\s*(.*)$/i.exec(line.trim());
           if (match) {
