@@ -36,6 +36,7 @@ function render(){
       else if(k===j)control.classList.add("bad");
     });
     feedback.textContent=correct?"Risposta corretta.":"Risposta corretta: "+q.o[q.answer]+".";
+    if(q.explanation) feedback.textContent+=" "+q.explanation;
     button("Avanti",()=>{i++;render();area.querySelector("button")?.focus();}).focus();
   }
 }
