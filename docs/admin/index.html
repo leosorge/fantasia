@@ -67,7 +67,15 @@ textarea[data-key="TESTO"]{min-height:9rem}textarea[data-key="QUIZ"],textarea[da
 <option value="photographic">Fotografico</option><option value="hand-drawn">Disegnato a mano</option>
 <option value="illustrated-collage">Collage illustrato</option><option value="editorial-geometric">Editoriale geometrico</option>
 </select></label>
-<label>Manifest Carousel Builder (.json) <input type="file" class="carousel-file" accept=".json,application/json"></label>
+<label>URL HTTPS della copertina <input class="carousel-cover" type="url" placeholder="https://…"></label>
+<label>Descrizione della copertina <input class="carousel-alt" type="text"></label>
+<div class="controls">
+<button type="button" class="build-manifest">Crea manifest dal testo</button>
+<button type="button" class="approve-copy">Approva profilo e testi</button>
+<button type="button" class="download-manifest">Scarica JSON</button>
+</div>
+<p>Scrivi ogni slide in CAROUSEL, con il titolo sulla prima riga e una riga vuota tra le slide. Per le copertine fotografiche, disegnate o a collage inserisci l’URL dell’immagine.</p>
+<label>Importa manifest Carousel Builder (.json) <input type="file" class="carousel-file" accept=".json,application/json"></label>
 <label>Manifest <textarea class="carousel-manifest" spellcheck="false"></textarea></label>
 <p>Usa il manifest e la copertina della direzione scelta. Pubblica dopo l’approvazione della prova visiva.</p>
 </div>
@@ -75,6 +83,7 @@ textarea[data-key="TESTO"]{min-height:9rem}textarea[data-key="QUIZ"],textarea[da
 <p>La scheda usa il testo nell’editor. La traduzione nella lingua scelta avviene alla pubblicazione.</p>
 <div class="controls"><button type="button" class="generate">Genera anteprima</button></div>
 <div class="preview"><p role="status">Carica un sorgente o compila le sezioni.</p><iframe title="Anteprima della scheda" sandbox="allow-scripts" hidden></iframe></div>
+<button type="button" class="approve-visual" hidden disabled>Approva prova visiva</button>
 <button type="button" class="publish">Prepara nuova scheda</button>
 </article>
 </template>
@@ -163,6 +172,16 @@ const makeVariant = name => {
   const carousel = node.querySelector(".carousel-controls");
   const direction = node.querySelector(".carousel-direction");
   const manifestField = node.querySelector(".carousel-manifest");
+  const cover = node.querySelector(".carousel-cover");
+  const alt = node.querySelector(".carousel-alt");
+  const approveVisual = node.querySelector(".approve-visual");
+  let editedManifest = false;
+  let renderedManifest = "";
+  const writeManifest = manifest => {
+    manifestField.value = JSON.stringify(manifest, null, 2);
+    editedManifest = false;
+    render();
+  };
   const manifestRequest = () => {
     let manifest;
     try { manifest = JSON.parse(manifestField.value); }
@@ -170,12 +189,17 @@ const makeVariant = name => {
     if (manifest?.brand?.visual_direction?.mode !== direction.value) {
       throw new Error("Il manifest e la direzione visiva scelta devono coincidere.");
     }
+    if (editedManifest) return {...manifest,workflow_state:"bozza",proof:{...manifest.proof,approved:false}};
     return manifest;
   };
   const importManifest = text => {
     manifestField.value = text;
+    editedManifest = false;
     try {
-      const mode = JSON.parse(text)?.brand?.visual_direction?.mode;
+      const manifest = JSON.parse(text);
+      cover.value = manifest.cover_image || "";
+      alt.value = manifest.cover_alt_text || "";
+      const mode = manifest?.brand?.visual_direction?.mode;
       if ([...direction.options].some(option => option.value === mode)) direction.value = mode;
     } catch {}
     render();
@@ -198,9 +222,67 @@ const makeVariant = name => {
   const render = () => {
     revision++;
     carousel.hidden = format.value !== "3";
+    approveVisual.hidden = carousel.hidden;
+    approveVisual.disabled = true;
     feedback.textContent = "Genera l’anteprima dopo aver modificato la variante.";
   };
-  node.addEventListener("input", render);
+  node.addEventListener("input", event => {
+    if (event.target === manifestField) editedManifest = true;
+    render();
+  });
+  node.querySelector(".build-manifest").addEventListener("click", () => {
+    const title = fields.TITOLO.value.trim();
+    const blocks = fields.CAROUSEL.value.trim().split(/\r?\n[ \t]*\r?\n/).filter(block => block.trim());
+    if (!title || !blocks.length || blocks.length > 6) {
+      feedback.textContent = "Compila TITOLO e inserisci da 1 a 6 slide in CAROUSEL.";
+      return;
+    }
+    if ((direction.value !== "editorial-geometric" || cover.value.trim()) &&
+        (!cover.value.trim().startsWith("https://") || !cover.checkValidity())) {
+      feedback.textContent = "Inserisci un URL HTTPS valido per la copertina.";
+      return;
+    }
+    const items = blocks.map((block,i) => {
+      const [heading,...lines] = block.trim().split(/\r?\n/);
+      return {id:"item-"+(i+1),layout:"editorial",title:lines.length ? heading : "",
+        summary:lines.length ? lines.join("\n").trim() : heading};
+    });
+    writeManifest({
+      schema_version:"1.1",source_type:"notes",sequence_mode:"sectional",workflow_state:"bozza",revision:1,
+      language:language.value,source_url:fields.FONTE.value.trim(),cover_title:title,
+      cover_image:cover.value.trim(),cover_alt_text:alt.value.trim(),
+      brand:{visual_direction:{mode:direction.value}},items,outro:{enabled:false},
+      proof:{slide_ids:["cover",items.reduce((a,b)=>a.summary.length>=b.summary.length?a:b).id],approved:false},
+      format:{ratio:"4:5",master_width:1080,master_height:1350,width:1440,height:1800,preview_width:480,preview_height:600},
+    });
+    feedback.textContent = "Bozza creata. Controlla il manifest e approva profilo e testi.";
+  });
+  node.querySelector(".approve-copy").addEventListener("click", () => {
+    try {
+      const manifest = manifestRequest();
+      writeManifest({...manifest,workflow_state:"testi_approvati",proof:{...manifest.proof,approved:false}});
+      feedback.textContent = "Testi approvati. Genera e verifica l’anteprima.";
+    } catch (error) { feedback.textContent = error.message; }
+  });
+  approveVisual.addEventListener("click", () => {
+    try {
+      const manifest = manifestRequest();
+      if (manifest.workflow_state !== "testi_approvati" || JSON.stringify(manifest) !== renderedManifest)
+        throw new Error("Approva i testi e genera una nuova anteprima.");
+      writeManifest({...manifest,workflow_state:"prova_visuale_approvata",proof:{...manifest.proof,approved:true}});
+      feedback.textContent = "Prova approvata. Puoi scaricare il JSON o preparare la pubblicazione.";
+    } catch (error) { feedback.textContent = error.message; }
+  });
+  node.querySelector(".download-manifest").addEventListener("click", () => {
+    try {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(manifestRequest(),null,2)],{type:"application/json"}));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "carousel-fantasia-"+name+".json";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { feedback.textContent = error.message; }
+  });
   button.addEventListener("click", async () => {
     if (!fields.TITOLO.value.trim() || !fields.TESTO.value.trim()) {
       feedback.textContent = "Compila TITOLO e TESTO.";
@@ -210,10 +292,14 @@ const makeVariant = name => {
     button.disabled = true;
     feedback.textContent = "Generazione in corso…";
     try {
-      const html = await generatePreview(serialize(),format.value);
+      const text = serialize();
+      const manifest = format.value === "3" ? manifestRequest() : null;
+      const html = await generatePreview(text,format.value);
       if (current !== revision) return;
       frame.srcdoc = html;
       frame.hidden = false;
+      renderedManifest = manifest ? JSON.stringify(manifest) : "";
+      approveVisual.disabled = manifest?.workflow_state !== "testi_approvati";
       feedback.textContent = "";
     } catch (error) {
       if (current === revision) feedback.textContent = error.message || "Anteprima non disponibile.";
