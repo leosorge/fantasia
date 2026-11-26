@@ -27,7 +27,7 @@ def notify(video, translator):
     date = video["published"][:10]
     description = "\n".join(
         f"— {line}" if re.fullmatch(
-            r"TITOLO|FONTE|URL|SOMMARIO|TESTO|CAROUSEL|QUIZ|GIOCO|3D|FRASE[- ]SINTESI|FORMATO",
+            r"TITOLO|FONTE|URL|SOMMARIO|TESTO|CAROUSEL|QUIZ|GIOCO|3D|FRASE[- ]SINTESI|FORMATO|CATEGORIE",
             line.strip(), re.I,
         ) else line
         for line in description.strip().splitlines()
@@ -60,9 +60,11 @@ def notify(video, translator):
                        f'Spiegazione: {item["t"].replace("____", item["o"][item["answer"]], 1).strip()}'])
             for item in questions
         )
+    categories = dict.fromkeys(tag["category"] for tag in video.get("tags", []) if tag.get("category"))
     sections = [
         ("TITOLO", title),
         ("FONTE", f"https://www.youtube.com/watch?v={video_id}"),
+        ("CATEGORIE", "\n".join(categories)),
         ("SOMMARIO", synopsis),
         ("TESTO", body),
         ("CAROUSEL", f"Il tema del video\n{synopsis}\n\n"

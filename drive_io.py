@@ -12,6 +12,19 @@ OLD_ID = "1QC0G1NlVVfQCf1nLX6Q85g2Kxmm0EkaE"
 OLD_TXT_ID = "1noKbzSbLnK4VUjWYo7y4DgJ6eL7EdQC2"
 
 
+def category_specification(content, names):
+    marker = "CATEGORIE AMMESSE\n"
+    example = "ESEMPIO (DATI FITTIZI)"
+    if example not in content:
+        raise ValueError("fantasia_formato.txt: intestazione ESEMPIO assente")
+    intro, remainder = content.split(example, 1)
+    if marker in intro:
+        intro = intro.split(marker, 1)[0]
+    section = marker + "\n".join(f"- {name}" for name in names)
+    section += "\n- Canali seguiti (assegnata automaticamente ai video dei canali monitorati)"
+    return intro.rstrip() + "\n\n" + section + "\n\n" + example + remainder
+
+
 def query_literal(value):
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
@@ -112,6 +125,16 @@ class DriveManager:
         media = MediaIoBaseUpload(io.BytesIO(content.encode("utf-8")), mimetype="text/plain", resumable=False)
         self.files.create(body={"name": name, "parents": [self.old_txt_id]},
                           media_body=media, supportsAllDrives=True, fields="id").execute()
+
+    def sync_category_specification(self, names):
+        from googleapiclient.http import MediaIoBaseUpload
+        file_id = "12c80du4uaN_PxbwGA52sYppWhnxlfaIK"
+        current = self.read({"id": file_id, "mimeType": "text/plain"})
+        updated = category_specification(current, names)
+        if updated != current:
+            media = MediaIoBaseUpload(io.BytesIO(updated.encode("utf-8")), mimetype="text/plain", resumable=False)
+            self.files.update(fileId=file_id, media_body=media, supportsAllDrives=True,
+                              fields="id").execute(num_retries=3)
 
     def has_video(self, video_id):
         query = f"appProperties has {{ key='fantasiaVideo' and value={query_literal(video_id)} }}"

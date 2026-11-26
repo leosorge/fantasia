@@ -56,11 +56,12 @@ def safe_url(value):
 def parse_source(text):
     text = text.strip()
     if re.match(r"TITOLO[ \t]*\r?\n", text, re.I):
-        parts = re.split(r"(?mi)^(TITOLO|SOMMARIO|TESTO|QUIZ|FRASE[- ]SINTESI|FONTE|URL|FORMATO|CAROUSEL|GIOCO|3D)[ \t]*\r?$", text)
+        parts = re.split(r"(?mi)^(TITOLO|SOMMARIO|TESTO|QUIZ|FRASE[- ]SINTESI|FONTE|URL|FORMATO|CAROUSEL|GIOCO|3D|CATEGORIE)[ \t]*\r?$", text)
         sections = {parts[i].lower(): parts[i + 1].strip() for i in range(1, len(parts), 2)}
         body = sections.get("testo") or sections.get("sommario")
         if body and sections.get("titolo"):
             fields = {"titolo": sections["titolo"], "sommario": sections.get("sommario", ""), "formato": sections.get("formato", ""),
+                      "categorie": sections.get("categorie", ""),
                       "sintesi": sections.get("frase-sintesi") or sections.get("frase sintesi", "")}
             if sections.keys() & {"carousel", "gioco", "3d"}:
                 fields["news_v1"] = sections
@@ -69,7 +70,7 @@ def parse_source(text):
             return fields, body
     fields, lines = {}, []
     for line in text.strip().splitlines():
-        match = re.match(r"^(titolo|title|fonte|url|formato|carousel)\s*:\s*(.*)$", line, re.I)
+        match = re.match(r"^(titolo|title|fonte|url|formato|carousel|categorie)\s*:\s*(.*)$", line, re.I)
         if match and not lines:
             fields[match[1].lower()] = match[2].strip()
         else:
@@ -293,7 +294,10 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
             "blocks": blocks, "body": body, "questions": trail if code == "4" else questions,
             "theme": "sectional" if structured else themes.get(theme, "narrative"),
             "structured": bool(structured), "scene_details": scene_details,
-            "scene_description": scene_description}
+            "scene_description": scene_description,
+            "categories": list(dict.fromkeys(
+                value.strip() for value in re.split(r"[\n;,]+", fields.get("categorie", "")) if value.strip()
+            ))}
 
 
 def js_data(value):
@@ -431,4 +435,4 @@ def run_expert(payload):
             panels = '<div class="comic-panels" aria-hidden="true"><span></span><span></span><span></span></div>' if comics else ""
             card = document(payload["title"], f'<main class="{"comics" if comics else "news"}"><h1>{title}</h1>{panels}'
                             f'<div class="body"><{tag}>{text}</{tag}></div>{source}</main>')
-    return {key: payload[key] for key in ("format_code", "format_label", "title")} | {"html": card}
+    return {key: payload[key] for key in ("format_code", "format_label", "title")} | {"html": card, "categories": payload.get("categories", [])}
