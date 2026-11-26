@@ -7,11 +7,11 @@
 <style>
 :root{color-scheme:dark;font:16px system-ui;color:#ebf4fd;background:#081423}
 *{box-sizing:border-box}body,p{margin:0}
-.preview{display:flex;flex-direction:column;justify-content:space-between;max-width:480px;min-height:min(125vw,600px);margin:auto}
-.description{padding:20px 22px 10px;line-height:1.43;font-size:clamp(15px,4vw,19px);white-space:pre-wrap;overflow-wrap:anywhere}
-.description footer{white-space:normal;margin-top:8px}.description a{color:#adffe5}
-.canvas-wrap{display:grid;place-items:center;flex:1;min-height:min(62vw,280px)}
-canvas{display:block;width:100%;height:auto;touch-action:pan-y;cursor:grab}canvas:active{cursor:grabbing}
+.preview{display:grid;grid-template-rows:minmax(0,2fr) minmax(0,3fr) auto auto;width:100%;max-width:480px;aspect-ratio:4/5;margin:auto;overflow:hidden}
+.description{min-height:0;overflow:auto;padding:10px 16px;line-height:1.43;font-size:clamp(13px,4vw,17px);white-space:pre-wrap;overflow-wrap:anywhere;overscroll-behavior:contain;scrollbar-gutter:stable}
+.preview footer{padding:4px 16px 9px;font-size:13px}.preview footer a{color:#adffe5}
+.canvas-wrap{display:grid;place-items:center;min-height:0;overflow:hidden;background:#081423}
+canvas{display:block;width:100%;height:100%;min-height:0;object-fit:contain;touch-action:pan-y;cursor:grab}canvas:active{cursor:grabbing}
 .controls{display:flex;gap:7px;flex-wrap:wrap;padding:9px 16px 12px}
 button{font:inherit;color:inherit;background:#192630;border:1px solid #597083;border-radius:7px;padding:5px 9px;cursor:pointer}
 button:hover{background:#243d4d}
@@ -20,7 +20,7 @@ button:hover{background:#243d4d}
 <main>
   
   <section class="preview" aria-label="Anteprima 3D">
-    <div class="description"><p>__FANTASIA_53_TEXT__</p>__FANTASIA_53_SOURCE__</div>
+    <div class="description" tabindex="0" aria-label="Riassunto della notizia"><p>__FANTASIA_53_TEXT__</p></div>
     <div class="canvas-wrap"><canvas id="view" width="1080" height="760" aria-label="Scena tridimensionale ruotabile"></canvas></div>
     <div class="controls">
       <button id="play" type="button"></button>
@@ -28,6 +28,7 @@ button:hover{background:#243d4d}
       <button id="right" type="button" aria-label="Ruota a destra">&#8594;</button>
       <button id="reset" type="button">Ripristina vista</button>
     </div>
+    __FANTASIA_53_SOURCE__
   </section>
 </main>
 <script id="settings" type="application/json">__FANTASIA_53_SETTINGS__</script>
@@ -175,12 +176,6 @@ canvas.addEventListener("lostpointercapture",()=>{drag=null;});
 
 refresh();
 playback();
-const preview=document.querySelector(".preview");
-if(parent!==window){
-  new ResizeObserver(()=>{
-    parent.postMessage({type:"fantasia-3d-height",height:Math.ceil(preview.getBoundingClientRect().height)},"*");
-  }).observe(preview);
-}
 </script>
 </body>
 </html>
