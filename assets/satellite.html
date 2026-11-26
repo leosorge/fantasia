@@ -55,7 +55,77 @@ function box(faces, x, y, z, w, h, d, color) {
   sides.forEach(side=>faces.push({points:side.map(index=>vertices[index]),color}));
 }
 
+function describedGeometry(description) {
+  const faces = [];
+  const add = (...args) => box(faces, ...args);
+  const text = description.toLowerCase();
+  let seed = 2166136261;
+  for (const letter of text) seed = Math.imul(seed ^ letter.codePointAt(0), 16777619) >>> 0;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const palette = ["#24b8ad","#62a0ef","#be8cfa","#f6bb78"];
+  const accent = palette[Math.floor(random()*palette.length)];
+  const optical = /foton|ottic|optical|fibra|fibre|waveguide|laser|niobat/.test(text);
+  const circuit = /chip|process[oa]|processore|circuit|wafer|semicondutt|cpu|gpu|npu/.test(text);
+  const orbit = /satellit|orbit|spazio|space|solari|solar/.test(text);
+  const lattice = /reticol|lattice|qubit|quantum|quantistic|griglia|grid/.test(text);
+  const rack = /rack|server|datacenter|data center|armadio/.test(text);
+  const lab = /banco|laborator|laboratory|bench/.test(text);
+  add(0,-.72,0,4.5,.16,3.2,"#253849");
+
+  if (lab) {
+    for (const x of [-1.8,1.8]) for (const z of [-1.2,1.2])
+      add(x,-.92,z,.14,.34,.14,"#6e889a");
+    for (let i=0;i<9;i++) add(-1.95+i*.48,-.62,1.27,.15,.035,.04,"#7599ae");
+  }
+  if (circuit || optical) {
+    add(0,-.51,0,2.7,.22,1.76,"#315779");
+    add(0,-.31,0,1.66,.2,1.15,"#576999");
+    for (const side of [-1,1]) for (let i=0;i<7;i++)
+      add(side*1.43,-.47,-.65+i*.215,.28,.09,.075,"#d8ad64");
+  }
+  if (optical) {
+    for (let lane=0;lane<5;lane++) {
+      const z=-.56+lane*.28;
+      const length=1.6+random()*.38;
+      add(0,-.18,z,length,.048,.065,lane%2 ? accent : "#8de6fd");
+      for (const side of [-1,1])
+        add(side*1.57,-.23,z,1.05,.065,.065,lane%2 ? "#65c7e7" : accent);
+    }
+    add(-2.11,-.27,0,.23,.31,1.43,"#bdcde0");
+    add(2.11,-.27,0,.23,.31,1.43,"#bdcde0");
+  }
+  if (orbit) {
+    add(0,.75,0,.77,.89,.61,"#c9d9e9");
+    add(0,1.32,0,.095,.4,.095,"#ecc77a");
+    for (const side of [-1,1]) for (let i=0;i<4;i++)
+      add(side*(.56+i*.39),.72,0,.36,.08,.6,"#447ca6");
+  }
+  if (lattice) {
+    for (let row=0;row<3;row++) for (let col=0;col<4;col++)
+      add(-.75+col*.5,.05+row*.36,-.9,.22,.22,.22,(row+col)%2 ? accent : "#6686ba");
+  }
+  if (rack) {
+    add(1.45,.12,-.85,.8,1.48,.66,"#364961");
+    for (let level=0;level<5;level++) {
+      add(1.45,-.4+level*.27,-.48,.66,.14,.08,"#627d94");
+      add(1.68,-.4+level*.27,-.43,.07,.07,.04,accent);
+    }
+  }
+  if (!(optical || circuit || orbit || lattice || rack)) {
+    for (let i=0;i<8;i++) {
+      const height = .24+random()*1.16;
+      add(-1.62+(i%4)*1.06,-.63+height/2,-.62+Math.floor(i/4)*1.24,
+          .42+random()*.32,height,.49,i%2 ? accent : "#4e729b");
+    }
+  }
+  return faces;
+}
+
 function geometry() {
+  if (settings.scene === "described") return describedGeometry(settings.description || "");
   const faces = [];
   if (settings.scene === "chip") {
     box(faces,0,0,0,3.8,.24,3.8,"#264f65");
