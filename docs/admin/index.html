@@ -9,6 +9,10 @@
 *{box-sizing:border-box}body{margin:auto;padding:24px;max-width:1200px}
 h1{margin:.4em 0 .8em}h2{font-size:1.2rem}a{color:#95e6ce}button,textarea,select,input{font:inherit}
 section,article{background:#192831;border:1px solid #39515d;border-radius:12px;padding:16px}
+.taxonomy{margin-top:16px}.topic-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;gap:10px;align-items:start}
+.topic-row input{font:inherit;width:100%;padding:8px;background:#101820;color:inherit;border:1px solid #526873;border-radius:6px}
+.topic-row button{margin-top:1.8rem}
+@media(max-width:760px){.topic-row{grid-template-columns:1fr}.topic-row button{justify-self:start;margin-top:0}}
 .editor{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}
 label{display:block;margin:.6em 0}button,select{border:1px solid #5c827e;border-radius:7px;padding:.5em .65em;background:#213842;color:inherit}
 button{cursor:pointer}button.danger{color:#ffcdcc;border-color:#a86565}
@@ -31,6 +35,14 @@ textarea[data-key="TESTO"]{min-height:9rem}textarea[data-key="QUIZ"],textarea[da
 <p id="source" role="status"></p>
 <label for="file">Carica il sorgente Fantasia News v1 (.txt)</label>
 <input type="file" id="file" accept=".txt,text/plain">
+</section>
+<section class="taxonomy">
+<h2>Categorie e parole chiave</h2>
+<p>Una parola chiave o una frase per riga. «Canali seguiti» viene assegnata automaticamente.</p>
+<div id="taxonomy-groups"></div>
+<div class="controls"><button id="add-category" type="button" disabled>Aggiungi categoria</button>
+<button id="stage-categories" type="button" disabled>Prepara modifica categorie</button></div>
+<p id="taxonomy-status" role="status"></p>
 </section>
 <div class="editor" id="editor"></div>
 <section id="send" hidden>
@@ -59,7 +71,7 @@ textarea[data-key="TESTO"]{min-height:9rem}textarea[data-key="QUIZ"],textarea[da
 </template>
 <script>
 "use strict";
-const sections = ["TITOLO","FONTE","SOMMARIO","TESTO","CAROUSEL","QUIZ","GIOCO","3D","FRASE-SINTESI"];
+const sections = ["TITOLO","FONTE","CATEGORIE","SOMMARIO","TESTO","CAROUSEL","QUIZ","GIOCO","3D","FRASE-SINTESI"];
 const cards = document.querySelector("#cards");
 const source = document.querySelector("#source");
 const request = document.querySelector("#request");
@@ -211,12 +223,68 @@ function selected() {
     source.textContent = "Questa scheda precede l’archivio dei sorgenti. Carica il .txt originale se lo hai.";
   }
 }
+const groupList = document.querySelector("#taxonomy-groups");
+const categoryStatus = document.querySelector("#taxonomy-status");
+let previousGroups;
+function addGroup(name = "", terms = []) {
+  const row = document.createElement("div");
+  row.className = "topic-row";
+  const nameLabel = document.createElement("label");
+  nameLabel.textContent = "Categoria";
+  const nameInput = document.createElement("input");
+  nameInput.value = name;
+  nameInput.maxLength = 100;
+  nameLabel.append(nameInput);
+  const termsLabel = document.createElement("label");
+  termsLabel.textContent = "Parole chiave";
+  const termsInput = document.createElement("textarea");
+  termsInput.value = terms.join("\n");
+  termsLabel.append(termsInput);
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "danger";
+  remove.textContent = "Rimuovi categoria";
+  remove.addEventListener("click", () => row.remove());
+  row.append(nameLabel,termsLabel,remove);
+  groupList.append(row);
+  return nameInput;
+}
+document.querySelector("#add-category").addEventListener("click", () => addGroup().focus());
+document.querySelector("#stage-categories").addEventListener("click", () => {
+  const groups = [...groupList.children].map(row => ({
+    name:row.querySelector("input").value.trim(),
+    terms:row.querySelector("textarea").value.split(/\r?\n/).map(term=>term.trim()).filter(Boolean),
+  }));
+  const names = groups.map(group=>group.name.toLowerCase());
+  if (!groups.length || groups.some(group=>!group.name || !group.terms.length)
+      || new Set(names).size !== groups.length || names.includes("canali seguiti")) {
+    categoryStatus.textContent = "Usa nomi distinti e inserisci almeno una parola chiave per categoria.";
+    return;
+  }
+  const data = {action:"categories",previous:previousGroups,groups};
+  if (new TextEncoder().encode(JSON.stringify(data)).length > 45000) {
+    categoryStatus.textContent = "La richiesta supera 45 KB.";
+    return;
+  }
+  categoryStatus.textContent = "";
+  stage(data);
+});
+fetch("categories.json",{cache:"no-cache"}).then(response=>{
+  if (!response.ok) throw new Error();
+  return response.json();
+}).then(groups=>{
+  previousGroups = groups;
+  for (const [name,terms] of Object.entries(groups)) addGroup(name,terms);
+  document.querySelector("#add-category").disabled = false;
+  document.querySelector("#stage-categories").disabled = false;
+}).catch(()=>{categoryStatus.textContent = "Elenco categorie non disponibile.";});
+
 const variants = [makeVariant("A"), makeVariant("B")];
 document.querySelector("#file").addEventListener("change", async event => {
   const file = event.target.files[0];
   if (!file) return;
   const parts = (await file.text()).replace(/^\uFEFF/,"").replace(/\r\n/g,"\n")
-    .split(/^(TITOLO|FONTE|SOMMARIO|TESTO|CAROUSEL|QUIZ|GIOCO|3D|FRASE[- ]SINTESI)[ \t]*$/gmi);
+    .split(/^(TITOLO|FONTE|CATEGORIE|SOMMARIO|TESTO|CAROUSEL|QUIZ|GIOCO|3D|FRASE[- ]SINTESI)[ \t]*$/gmi);
   for (const variant of variants) {
     for (const field of Object.values(variant.fields)) field.value = "";
     for (let i=1; i<parts.length; i+=2) {
