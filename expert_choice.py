@@ -56,14 +56,14 @@ def safe_url(value):
 def parse_source(text):
     text = text.strip()
     if re.match(r"TITOLO[ \t]*\r?\n", text, re.I):
-        parts = re.split(r"(?mi)^(TITOLO|SOMMARIO|TESTO|QUIZ|FRASE[- ]SINTESI|FONTE|URL|FORMATO|CAROUSEL|GIOCO|3D|CATEGORIE)[ \t]*\r?$", text)
+        parts = re.split(r"(?mi)^(TITOLO|SOMMARIO|TESTO|QUIZ|FRASE[- ]SINTESI|FONTE|URL|FORMATO|CAROUSEL|GIOCO|3D|CATEGORIE|MANIFEST-CAROUSEL)[ \t]*\r?$", text)
         sections = {parts[i].lower(): parts[i + 1].strip() for i in range(1, len(parts), 2)}
         body = sections.get("testo") or sections.get("sommario")
         if body and sections.get("titolo"):
             fields = {"titolo": sections["titolo"], "sommario": sections.get("sommario", ""), "formato": sections.get("formato", ""),
                       "categorie": sections.get("categorie", ""),
                       "sintesi": sections.get("frase-sintesi") or sections.get("frase sintesi", "")}
-            if sections.keys() & {"carousel", "gioco", "3d"}:
+            if sections.keys() & {"carousel", "gioco", "3d", "manifest-carousel"}:
                 fields["news_v1"] = sections
             if source := sections.get("fonte") or sections.get("url"):
                 fields["fonte"] = source
@@ -214,13 +214,16 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
         "",
     )
     structured = fields.get("news_v1")
+    manifest = None
     scene_details = ""
     scene_description = ""
     if structured:
         questions = section_questions(structured.get("quiz", ""))
         trail = section_questions(structured.get("gioco", ""), game=True)
         blocks = section_blocks(structured.get("carousel", ""))
-        carousel_ok = len(blocks) >= 3 and all("\n" in block for block in blocks)
+        if manifest_text := structured.get("manifest-carousel"):
+            manifest = parse_carousel_manifest(manifest_text)
+        carousel_ok = bool(manifest and (code == "3" or manifest_approved(manifest)))
         scene = section_fields(structured.get("3d", ""))
         scene_description = scene.get("scena", "")
         scene_code = {"processore": "5.1", "reticolo": "5.2", "satellite": "5.3"}.get(
@@ -264,8 +267,6 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
             eligible = ["1"]
             if questions:
                 eligible.append("2")
-            if len(blocks) >= 3:
-                eligible.append("3")
             if len(trail) == 3:
                 eligible.append("4")
             if editorial and re.search(r"\b(?:chip|processori?|qubits?|fotonic\w*|quantistic\w*|quantum)\b", hint):
@@ -294,7 +295,7 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
             "blocks": blocks, "body": body, "questions": trail if code == "4" else questions,
             "theme": "sectional" if structured else themes.get(theme, "narrative"),
             "structured": bool(structured), "scene_details": scene_details,
-            "scene_description": scene_description,
+            "scene_description": scene_description, "carousel_manifest": manifest,
             "categories": list(dict.fromkeys(
                 value.strip() for value in re.split(r"[\n;,]+", fields.get("categorie", "")) if value.strip()
             ))}
@@ -347,7 +348,134 @@ def update_legacy_3d(card):
     return card
 
 
-def run_expert(payload):
+CAROUSEL_DIRECTIONS = {
+    "photographic", "hand-drawn", "illustrated-collage", "editorial-geometric",
+}
+
+
+def parse_carousel_manifest(text):
+    try:
+        manifest = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Manifest Carousel Builder: JSON non valido") from exc
+    if not isinstance(manifest, dict):
+        raise ValueError("Manifest Carousel Builder: serve un oggetto JSON")
+    title, items, brand = (manifest.get(key) for key in ("cover_title", "items", "brand"))
+    direction = brand.get("visual_direction", {}) if isinstance(brand, dict) else {}
+    mode = direction.get("mode") if isinstance(direction, dict) else None
+    if (not isinstance(title, str) or not title.strip() or not isinstance(items, list) or not items
+            or manifest.get("sequence_mode") not in {"narrative", "sectional"}
+            or not isinstance(mode, str) or mode not in CAROUSEL_DIRECTIONS):
+        raise ValueError("Manifest Carousel Builder: verifica copertina, slide, sequenza e direzione visiva")
+    if any(not isinstance(item, dict) or any(not isinstance(item.get(k, ""), str)
+           for k in ("title", "summary")) or not (item.get("title") or item.get("summary")) for item in items):
+        raise ValueError("Manifest Carousel Builder: ogni slide deve avere testo o titolo")
+    image = manifest.get("cover_image", "")
+    if image and not (isinstance(image, str) and safe_url(image) and image.startswith("https://")):
+        raise ValueError("Copertina: usa un URL HTTPS pubblico al posto del percorso locale")
+    if not image and mode != "editorial-geometric":
+        raise ValueError("Aggiungi l’URL HTTPS della copertina per questa direzione visiva")
+    return manifest
+
+
+def manifest_approved(manifest):
+    proof = manifest.get("proof")
+    return (isinstance(proof, dict) and proof.get("approved") is True and
+            manifest.get("workflow_state") in {"prova_visuale_approvata", "rendering", "qa", "consegnato"})
+
+
+def render_carousel_manifest(manifest, source, preview):
+    if not preview and not manifest_approved(manifest):
+        raise ValueError("Approva testi e prova visiva in Carousel Builder prima di pubblicare")
+    brand = manifest["brand"]
+    mode = brand["visual_direction"]["mode"]
+    image = manifest.get("cover_image", "")
+    manifest_source = manifest.get("source_url")
+    source = (safe_url(manifest_source) if isinstance(manifest_source, str) else "") or source
+    palette = brand.get("palette") or {}
+    if not isinstance(palette, dict):
+        palette = {}
+
+    def color(key, fallback):
+        value = palette.get(key, "")
+        return value if isinstance(value, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", value) else fallback
+
+    def font(role, fallback):
+        fonts = brand.get("fonts", {})
+        entry = fonts.get(role, {}) if isinstance(fonts, dict) else {}
+        family = entry.get("family", "") if isinstance(entry, dict) else ""
+        return f'"{family}",{fallback}' if isinstance(family, str) and re.fullmatch(r"[\w -]{1,60}", family) else fallback
+
+    def emphasis(copy, serif, accents=()):
+        mapping = {}
+        for values, css in ((serif, "serif"), (accents, "accent")):
+            if isinstance(values, (list, tuple)):
+                mapping.update({value: css for value in values[:2] if isinstance(value, str) and value and value in copy})
+        if not mapping:
+            return escape(copy)
+        pattern = "(" + "|".join(re.escape(value) for value in sorted(mapping, key=len, reverse=True)) + ")"
+        return "".join(f'<span class="{mapping[part]}">{escape(part)}</span>' if part in mapping else escape(part)
+                       for part in re.split(pattern, copy))
+
+    cover = (f'<img src="{escape(image, quote=True)}" alt="{escape(str(manifest.get("cover_alt_text", "")), quote=True)}">'
+             if image else "")
+    cover_title = manifest["cover_title"]
+    slides = [f'<section class="slide cover {mode}">{cover}'
+              f'<h1>{emphasis(cover_title, manifest.get("cover_title_serif"))}</h1></section>']
+    for item in manifest["items"]:
+        title, copy = item.get("title", ""), item.get("summary", "")
+        heading = f'<h2>{emphasis(title, item.get("title_serif"), item.get("title_accent"))}</h2>' if title else ""
+        slides.append(f'<section class="slide copy" hidden>{heading}'
+                      f'<p>{emphasis(copy, item.get("summary_serif"), item.get("summary_accent"))}</p></section>')
+    outro = manifest.get("outro")
+    if isinstance(outro, dict) and outro.get("enabled"):
+        slides.append(f'<section class="slide copy" hidden><h2>{escape(str(outro.get("title", "")))}</h2>'
+                      f'<p>{escape(str(outro.get("body", "")))}</p></section>')
+    variables = (f"--paper:{color('background_light','#f3eee4')};--ink:{color('text_on_light','#18242b')};"
+                 f"--dark:{color('background_dark','#18242b')};--light:{color('text_on_dark','#ffffff')};"
+                 f"--accent:{color('accent','#5fa089')};--display:{font('display','Georgia,serif')};"
+                 f"--body:{font('body','system-ui,sans-serif')};--serif:{font('emphasis_italic','Georgia,serif')}")
+    css = """
+    #cb{position:relative;display:grid;grid-template-rows:minmax(0,1fr) auto;padding:0;gap:0;background:var(--dark);color:var(--light);container-type:inline-size}
+    #cb .slide{position:relative;display:grid;align-content:center;gap:3cqw;padding:10cqw;overflow:auto;min-height:0;isolation:isolate}
+    #cb h1,#cb h2{font-family:var(--display);line-height:1.08;margin:0;overflow-wrap:anywhere}
+    #cb h1{font-size:clamp(20px,9.5cqw,48px)}#cb h2{font-size:clamp(18px,6.4cqw,32px)}
+    #cb p{font:clamp(14px,5.6cqw,28px)/1.16 var(--body);white-space:pre-wrap;overflow-wrap:anywhere}
+    #cb .copy{background:var(--paper);color:var(--ink)}
+    #cb .serif{font-family:var(--serif);font-style:italic}#cb .accent{color:var(--accent)}
+    #cb .cover img{width:100%;max-height:44cqw;object-fit:contain;object-position:center}
+    #cb .photographic{align-content:end}
+    #cb .photographic img{position:absolute;inset:0;height:100%;max-height:none;object-fit:cover;z-index:-2}
+    #cb .photographic::before{content:"";position:absolute;inset:0;background:linear-gradient(transparent,#071019e8);z-index:-1}
+    #cb .hand-drawn{background:var(--paper);color:var(--ink)}
+    #cb .illustrated-collage img{object-fit:cover;transform:rotate(-3deg);border:4px solid var(--paper);box-shadow:8px 8px var(--accent)}
+    #cb .editorial-geometric{background:linear-gradient(140deg,var(--dark) 68%,var(--accent) 68%)}
+    #cb nav{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:5px 7px}
+    #cb footer{margin-left:auto}#cb nav button{font-size:clamp(11px,3cqw,15px);padding:4px}
+    #cb output{position:absolute;z-index:2;top:6px;right:8px;background:#18242b;color:#fff;padding:3px 5px;border-radius:4px}
+    """
+    script = """<script>
+    const slides=[...document.querySelectorAll('#cb .slide')];
+    const position=document.querySelector('#cb output');
+    const back=document.querySelector('#cb-back'), next=document.querySelector('#cb-next');
+    let index=0;
+    function show() {
+      slides.forEach((slide,i)=>{slide.hidden=i!==index;});
+      position.value=(index+1)+' / '+slides.length;
+      back.disabled=index===0;
+      next.disabled=index===slides.length-1;
+    }
+    back.onclick=()=>{index--;show();};
+    next.onclick=()=>{index++;show();};
+    show();
+    </script>"""
+    content = (f'<main id="cb" style="{escape(variables, quote=True)}"><output aria-live="polite"></output>'
+               f'{"".join(slides)}<nav aria-label="Navigazione carosello"><button id="cb-back">Indietro</button>'
+               f'<button id="cb-next">Avanti</button>{source_link({"source": source})}</nav></main>')
+    return document(cover_title, content, script, css)
+
+
+def run_expert(payload, *, preview=False):
     code = payload["format_code"]
     title = escape(payload["title"])
     source = source_link(payload)
@@ -365,6 +493,8 @@ def run_expert(payload):
                 '<div id="commands" class="controls"></div><p id="hint"></p>') if game else '<div class="body" id="play"></div>'
         card = document(payload["title"], f'<main class="{"qwat" if game else "quiz"}"><h1>{title}</h1>{body}{source}</main>',
                         f'<script id="data" type="application/json">{data}</script><script>{script}</script>')
+    elif code == "3" and payload.get("carousel_manifest"):
+        card = render_carousel_manifest(payload["carousel_manifest"], payload["source"], preview)
     elif code == "3":
         theme = payload["theme"]
         slides = [{"title":payload["title"], "text":""}]

@@ -40,3 +40,13 @@ python main.py check-drive
 ```
 
 La cartella `demo/` del pacchetto contiene un esempio generato da 14 testi. Apri `demo/docs/index.html` e scorri la griglia. Carousel, Game-PIP e American Comics sono le prime tre schede. I due HTML espulsi sono in `demo/old/`. Con `python main.py demo --root demo` puoi rielaborare la coda locale dopo aver aggiunto nuovi file a `demo/new/`.
+
+## Carousel Builder
+
+Per i nuovi sorgenti strutturati, il formato Carousel usa un manifest Carousel Builder in `MANIFEST-CAROUSEL`.
+Importalo nella variante A o B del pannello. Le direzioni ammesse sono Fotografico, Disegnato a mano,
+Collage illustrato ed Editoriale geometrico. Il manifest deve indicare la stessa direzione. Usa un URL
+HTTPS pubblico per la copertina. Per pubblicare serve una prova visiva approvata. Indicando `language`
+nel manifest, l’editor può pubblicare testi già approvati in quella lingua; il valore predefinito è `it`.
+Il produttore automatico può continuare a preparare la sezione testuale CAROUSEL. Il router la rende
+pubblicabile come Carousel dopo l’importazione di un manifest approvato.

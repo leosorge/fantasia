@@ -99,7 +99,12 @@ def apply_request(drive, root, request):
             if not fields.get("news_v1"):
                 raise ValueError("Inserisci un sorgente Fantasia News v1")
             payload = choose_and_adapt(body, "admin", code)
-            translate_payload(payload, language)
+            if code == "3" and payload.get("carousel_manifest"):
+                manifest_language = payload["carousel_manifest"].get("language", "it")
+                if language != manifest_language:
+                    raise ValueError("Per cambiare lingua, usa un manifest approvato nella lingua selezionata")
+            else:
+                translate_payload(payload, language)
             card = run_expert(payload)
             card["html"] = card["html"].replace('<html lang="it">', f'<html lang="{language}">', 1)
             drive.archive_text(key, body)

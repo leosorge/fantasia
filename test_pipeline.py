@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -92,13 +93,40 @@ class PipelineTests(unittest.TestCase):
         draft = notify(video, translator)
         with patch("expert_choice.choice", return_value="4") as draw:
             game = choose_and_adapt(draft, "youtube")
-        self.assertEqual(draw.call_args.args[0], ["1", "2", "3", "4", "5.4", "6"])
+        self.assertEqual(draw.call_args.args[0], ["1", "2", "4", "5.4", "6"])
         self.assertEqual([q["o"][q["answer"]] for q in game["questions"]], ["24", "15%", "8"])
         self.assertIn("qwat", run_expert(game)["html"])
         quiz = choose_and_adapt(draft, "youtube", "2")
         self.assertTrue(quiz["questions"][0]["explanation"])
         with self.assertRaises(ValueError):
             choose_and_adapt(draft.replace("GIOCO\nFrase:", "GIOCO\nTesto:"), "youtube", "4")
+
+    def test_carousel_builder_manifest_preserves_approved_copy(self):
+        raw = ("TITOLO\nTitolo della notizia\n\nTESTO\nNotizia test.\n\nCAROUSEL\nBozza da sostituire.\n\n"
+               "MANIFEST-CAROUSEL\n")
+        manifest = {
+            "cover_title": "Copertina approvata",
+            "cover_image": "https://example.org/cover.png",
+            "brand": {"visual_direction": {}},
+            "sequence_mode": "sectional",
+            "items": [{"title": "Prima slide", "summary": "Testo esatto & verificato."}],
+            "outro": {"enabled": True, "title": "Chiusura", "body": "Una domanda da discutere."},
+        }
+        for mode in ("photographic", "hand-drawn", "illustrated-collage", "editorial-geometric"):
+            manifest["brand"]["visual_direction"]["mode"] = mode
+            payload = choose_and_adapt(raw + json.dumps(manifest), "test", "3")
+            self.assertIn('cover ' + mode, run_expert(payload, preview=True)["html"])
+            with self.assertRaisesRegex(ValueError, "Approva"):
+                run_expert(payload)
+        manifest["workflow_state"] = "prova_visuale_approvata"
+        manifest["proof"] = {"approved": True}
+        with patch("expert_choice.choice", return_value="3") as draw:
+            payload = choose_and_adapt(raw + json.dumps(manifest), "test")
+        self.assertIn("3", draw.call_args.args[0])
+        html = run_expert(payload)["html"]
+        self.assertIn("Testo esatto &amp; verificato.", html)
+        self.assertIn("Una domanda da discutere.", html)
+        self.assertNotIn("Bozza da sostituire.", html)
 
     def test_free_scene_and_historical_models(self):
         source = ("TITOLO\nStesso titolo\n\nTESTO\nUn testo per la demo.\n\n"
