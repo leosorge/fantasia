@@ -7,7 +7,8 @@ class TranslationError(Exception):
 
 
 class ItalianTranslator:
-    def __init__(self):
+    def __init__(self, target='it'):
+        self.target = target
         self.model = None
         self.tokenizer = None
 
@@ -17,7 +18,7 @@ class ItalianTranslator:
         # Links and handles are weak language signals compared with the copy.
         sample = re.sub(r"https?://\S+|[@#]\w+", " ", title + "\n" + description)
         language, _ = langid.classify(sample)
-        if language == "it":
+        if language == self.target:
             return title, description
         if self.model is None:
             from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
@@ -56,7 +57,7 @@ class ItalianTranslator:
         import torch
         with torch.inference_mode():
             output = self.model.generate(**encoded,
-                                         forced_bos_token_id=self.tokenizer.get_lang_id("it"),
+                                         forced_bos_token_id=self.tokenizer.get_lang_id(self.target),
                                          max_new_tokens=780, num_beams=3)
         decoded = self.tokenizer.decode(output[0], skip_special_tokens=True).strip()
         if not decoded:

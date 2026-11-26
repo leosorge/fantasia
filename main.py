@@ -47,7 +47,11 @@ def prepare(drive, root):
         except (UnicodeError, ValueError) as exc:
             print(f'{item["name"]}: {exc} — resta in coda.', file=sys.stderr)
             continue
-        entries.append(run_expert(payload) | {"key": key})
+        entry = run_expert(payload) | {"key": key}
+        if hasattr(drive, "archive_text"):
+            drive.archive_text(key, body)
+            entry["source_archived"] = True
+        entries.append(entry)
         seen.add(key)
     rotate_batch(state, entries, drive.archive)
     save(state, root)

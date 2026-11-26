@@ -9,6 +9,7 @@ FOLDER = "application/vnd.google-apps.folder"
 SCOPE = "https://www.googleapis.com/auth/drive"
 NEW_ID = "1uHM0g_0uIfg0YRi_l2uG6-mRrUQCPrOP"
 OLD_ID = "1QC0G1NlVVfQCf1nLX6Q85g2Kxmm0EkaE"
+OLD_TXT_ID = "1noKbzSbLnK4VUjWYo7y4DgJ6eL7EdQC2"
 
 
 def query_literal(value):
@@ -40,12 +41,13 @@ class DriveManager:
         self.files = service.files()
         self.new_id = os.getenv("FANTASIA_NEW_ID") or NEW_ID
         self.old_id = os.getenv("FANTASIA_OLD_ID") or OLD_ID
+        self.old_txt_id = os.getenv("FANTASIA_OLD_TXT_ID") or OLD_TXT_ID
         self.shared_drive = os.getenv("FANTASIA_SHARED_DRIVE_ID")
-        if self.new_id == self.old_id:
+        if len({self.new_id, self.old_id, self.old_txt_id}) != 3:
             raise ValueError("La coda e l’archivio devono essere cartelle distinte.")
 
     def validate(self):
-        for folder in (self.new_id, self.old_id):
+        for folder in (self.new_id, self.old_id, self.old_txt_id):
             data = self.files.get(fileId=folder, supportsAllDrives=True, fields="mimeType,trashed").execute()
             if data.get("trashed") or data["mimeType"] != FOLDER:
                 raise ValueError("Configurazione Drive: cartella assente o non utilizzabile.")
@@ -99,6 +101,17 @@ class DriveManager:
                 "appProperties": {"fantasiaArchive": key}}
         media = MediaIoBaseUpload(io.BytesIO(html.encode("utf-8")), mimetype="text/html", resumable=False)
         self.files.create(body=body, media_body=media, supportsAllDrives=True, fields="id").execute()
+
+    def archive_text(self, key, content):
+        from googleapiclient.http import MediaIoBaseUpload
+        name = f"{key}.txt"
+        query = (f"{query_literal(self.old_txt_id)} in parents and trashed=false and "
+                 f"name = {query_literal(name)}")
+        if next(self.list_files(query, "id"), None):
+            return
+        media = MediaIoBaseUpload(io.BytesIO(content.encode("utf-8")), mimetype="text/plain", resumable=False)
+        self.files.create(body={"name": name, "parents": [self.old_txt_id]},
+                          media_body=media, supportsAllDrives=True, fields="id").execute()
 
     def has_video(self, video_id):
         query = f"appProperties has {{ key='fantasiaVideo' and value={query_literal(video_id)} }}"

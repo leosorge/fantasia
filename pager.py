@@ -147,6 +147,9 @@ def save(state, root):
     root = Path(root)
     docs = root / "docs"
     write(docs / "index.html", render_page(state["slots"]))
+    cards = [{key: card[key] for key in ("key", "position", "title", "format_code", "format_label")}
+             | {"source_archived": card.get("source_archived", False)} for card in state["slots"]]
+    write(docs / "admin" / "feed.json", json.dumps(cards, ensure_ascii=False))
     for number in range(1, 5):
         (docs / f"page_{number}.html").unlink(missing_ok=True)
     save_state(state, root)
