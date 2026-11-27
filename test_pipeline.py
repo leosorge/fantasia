@@ -93,7 +93,7 @@ class PipelineTests(unittest.TestCase):
         draft = notify(video, translator)
         with patch("expert_choice.choice", return_value="4") as draw:
             game = choose_and_adapt(draft, "youtube")
-        self.assertEqual(draw.call_args.args[0], ["1", "2", "4", "5.4", "6"])
+        self.assertEqual(draw.call_args.args[0], ["1", "2", "3", "4", "5.4", "6"])
         self.assertEqual([q["o"][q["answer"]] for q in game["questions"]], ["24", "15%", "8"])
         self.assertIn("qwat", run_expert(game)["html"])
         quiz = choose_and_adapt(draft, "youtube", "2")

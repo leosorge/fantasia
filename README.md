@@ -48,5 +48,6 @@ Importalo nella variante A o B del pannello. Le direzioni ammesse sono Fotografi
 Collage illustrato ed Editoriale geometrico. Il manifest deve indicare la stessa direzione. Usa un URL
 HTTPS pubblico per la copertina. Per pubblicare serve una prova visiva approvata. Indicando `language`
 nel manifest, l’editor può pubblicare testi già approvati in quella lingua; il valore predefinito è `it`.
-Il produttore automatico può continuare a preparare la sezione testuale CAROUSEL. Il router la rende
-pubblicabile come Carousel dopo l’importazione di un manifest approvato.
+Il produttore automatico può continuare a preparare la sezione testuale CAROUSEL. Se è completa, il router può pubblicarla come Carousel con una delle quattro copertine Fantasia.
+Le copertine predefinite in `docs/carousel-covers/` provengono dai quattro file `carousel-*` nella cartella Drive FANTASIA.
+Un URL esplicito nel manifest sostituisce la copertina predefinita.

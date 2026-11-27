@@ -215,6 +215,7 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
     )
     structured = fields.get("news_v1")
     manifest = None
+    automatic_carousel = False
     scene_details = ""
     scene_description = ""
     if structured:
@@ -223,7 +224,8 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
         blocks = section_blocks(structured.get("carousel", ""))
         if manifest_text := structured.get("manifest-carousel"):
             manifest = parse_carousel_manifest(manifest_text)
-        carousel_ok = bool(manifest and (code == "3" or manifest_approved(manifest)))
+        automatic_carousel = manifest is None and 3 <= len(blocks) <= 6 and all("\n" in block for block in blocks)
+        carousel_ok = automatic_carousel or bool(manifest and (code == "3" or manifest_approved(manifest)))
         scene = section_fields(structured.get("3d", ""))
         scene_description = scene.get("scena", "")
         scene_code = {"processore": "5.1", "reticolo": "5.2", "satellite": "5.3"}.get(
@@ -295,7 +297,7 @@ def choose_and_adapt(raw_text, source_name, forced_choice=None):
             "blocks": blocks, "body": body, "questions": trail if code == "4" else questions,
             "theme": "sectional" if structured else themes.get(theme, "narrative"),
             "structured": bool(structured), "scene_details": scene_details,
-            "scene_description": scene_description, "carousel_manifest": manifest,
+            "scene_description": scene_description, "carousel_manifest": manifest, "automatic_carousel": automatic_carousel,
             "categories": list(dict.fromkeys(
                 value.strip() for value in re.split(r"[\n;,]+", fields.get("categorie", "")) if value.strip()
             ))}
@@ -348,9 +350,8 @@ def update_legacy_3d(card):
     return card
 
 
-CAROUSEL_DIRECTIONS = {
-    "photographic", "hand-drawn", "illustrated-collage", "editorial-geometric",
-}
+CAROUSEL_DIRECTIONS = ("photographic", "hand-drawn", "illustrated-collage", "editorial-geometric")
+CAROUSEL_COVER_BASE = "https://leosorge.github.io/fantasia/carousel-covers/"
 
 
 def parse_carousel_manifest(text):
@@ -373,8 +374,6 @@ def parse_carousel_manifest(text):
     image = manifest.get("cover_image", "")
     if image and not (isinstance(image, str) and safe_url(image) and image.startswith("https://")):
         raise ValueError("Copertina: usa un URL HTTPS pubblico al posto del percorso locale")
-    if not image and mode != "editorial-geometric":
-        raise ValueError("Aggiungi l’URL HTTPS della copertina per questa direzione visiva")
     return manifest
 
 
@@ -384,12 +383,12 @@ def manifest_approved(manifest):
             manifest.get("workflow_state") in {"prova_visuale_approvata", "rendering", "qa", "consegnato"})
 
 
-def render_carousel_manifest(manifest, source, preview):
-    if not preview and not manifest_approved(manifest):
+def render_carousel_manifest(manifest, source, preview, *, automatic=False):
+    if not (preview or automatic or manifest_approved(manifest)):
         raise ValueError("Approva testi e prova visiva in Carousel Builder prima di pubblicare")
     brand = manifest["brand"]
     mode = brand["visual_direction"]["mode"]
-    image = manifest.get("cover_image", "")
+    image = manifest.get("cover_image") or f"{CAROUSEL_COVER_BASE}{mode}.jpg"
     manifest_source = manifest.get("source_url")
     source = (safe_url(manifest_source) if isinstance(manifest_source, str) else "") or source
     palette = brand.get("palette") or {}
@@ -449,7 +448,9 @@ def render_carousel_manifest(manifest, source, preview):
     #cb .photographic::before{content:"";position:absolute;inset:0;background:linear-gradient(transparent,#071019e8);z-index:-1}
     #cb .hand-drawn{background:var(--paper);color:var(--ink)}
     #cb .illustrated-collage img{object-fit:cover;transform:rotate(-3deg);border:4px solid var(--paper);box-shadow:8px 8px var(--accent)}
-    #cb .editorial-geometric{background:linear-gradient(140deg,var(--dark) 68%,var(--accent) 68%)}
+    #cb .editorial-geometric{background:var(--dark)}
+    #cb .editorial-geometric img{position:absolute;inset:0;height:100%;max-height:none;object-fit:cover;z-index:-2}
+    #cb .editorial-geometric{align-content:start}
     #cb nav{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:5px 7px}
     #cb footer{margin-left:auto}#cb nav button{font-size:clamp(11px,3cqw,15px);padding:4px}
     #cb output{position:absolute;z-index:2;top:6px;right:8px;background:#18242b;color:#fff;padding:3px 5px;border-radius:4px}
@@ -495,6 +496,15 @@ def run_expert(payload, *, preview=False):
                         f'<script id="data" type="application/json">{data}</script><script>{script}</script>')
     elif code == "3" and payload.get("carousel_manifest"):
         card = render_carousel_manifest(payload["carousel_manifest"], payload["source"], preview)
+    elif code == "3" and payload.get("automatic_carousel"):
+        style = choice(CAROUSEL_DIRECTIONS)
+        items = []
+        for block in payload["blocks"]:
+            title_line, _, summary = block.partition("\n")
+            items.append({"title": title_line, "summary": summary.strip()})
+        manifest = {"cover_title": payload["title"], "sequence_mode": "sectional",
+                    "brand": {"visual_direction": {"mode": style}}, "items": items}
+        card = render_carousel_manifest(manifest, payload["source"], preview, automatic=True)
     elif code == "3":
         theme = payload["theme"]
         slides = [{"title":payload["title"], "text":""}]
