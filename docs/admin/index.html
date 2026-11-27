@@ -74,7 +74,7 @@ textarea[data-key="TESTO"]{min-height:9rem}textarea[data-key="QUIZ"],textarea[da
 <button type="button" class="approve-copy">Approva profilo e testi</button>
 <button type="button" class="download-manifest">Scarica JSON</button>
 </div>
-<p>Scrivi ogni slide in CAROUSEL, con il titolo sulla prima riga e una riga vuota tra le slide. Per le copertine fotografiche, disegnate o a collage inserisci l’URL dell’immagine.</p>
+<p>Scrivi ogni slide in CAROUSEL, con il titolo sulla prima riga e una riga vuota tra le slide. Lascia vuoto l’URL per usare la copertina Fantasia della direzione scelta.</p>
 <label>Importa manifest Carousel Builder (.json) <input type="file" class="carousel-file" accept=".json,application/json"></label>
 <label>Manifest <textarea class="carousel-manifest" spellcheck="false"></textarea></label>
 <p>Usa il manifest e la copertina della direzione scelta. Pubblica dopo l’approvazione della prova visiva.</p>
@@ -237,7 +237,7 @@ const makeVariant = name => {
       feedback.textContent = "Compila TITOLO e inserisci da 1 a 6 slide in CAROUSEL.";
       return;
     }
-    if ((direction.value !== "editorial-geometric" || cover.value.trim()) &&
+    if (cover.value.trim() &&
         (!cover.value.trim().startsWith("https://") || !cover.checkValidity())) {
       feedback.textContent = "Inserisci un URL HTTPS valido per la copertina.";
       return;
