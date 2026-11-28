@@ -10,7 +10,8 @@
       ],
       "key": "45ee85356f9fdd30f29868440599794423f7f1bd76063022c71d8f3d8da790ad",
       "source_archived": true,
-      "position": 1
+      "position": 1,
+      "published_on": "2026-11-28"
     },
     {
       "format_code": "3",
@@ -22,7 +23,8 @@
       ],
       "key": "f686e2299cb84d79c6d23a137d8f3ad1ea0a0f7b053556ca2fdcfe0c439dcc46",
       "source_archived": true,
-      "position": 2
+      "position": 2,
+      "published_on": "2026-11-28"
     },
     {
       "format_code": "5.4",
@@ -34,7 +36,8 @@
       ],
       "key": "fe5018f0fd4d4ea2e1ac00ad7b5dbe27cf7e6115929a86102ed7f861b59018fb",
       "source_archived": true,
-      "position": 3
+      "position": 3,
+      "published_on": "2026-11-28"
     },
     {
       "format_code": "2",
